@@ -1,0 +1,8 @@
+[submodule "third_party/loom-dataflow"]
+	path = third_party/loom-dataflow
+	url = git@github.com:ecolab-nus/loom-dataflow.git
+	branch = feature/symbolic-LCS2.0
+[submodule "third_party/helion-mlir"]
+	path = third_party/helion-mlir
+	url = git@github.com:ecolab-nus/helion-mlir.git
+	branch = main
