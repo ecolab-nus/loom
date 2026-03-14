@@ -34,6 +34,8 @@ import json
 import sys
 from pathlib import Path
 
+from loom_utils.timer import PipelineTimer, print_timing_summary
+
 
 # ---------------------------------------------------------------------------
 # Argument parsing
@@ -121,11 +123,12 @@ def main() -> None:
         print("=" * 72)
         print()
 
-        from kernels.matmul import generate_mlir as frontend_generate_mlir  # noqa: PLC0415
+        with PipelineTimer("Step 0: Helion Frontend"):
+            from kernels.matmul import generate_mlir as frontend_generate_mlir  # noqa: PLC0415
 
-        mlir_text = frontend_generate_mlir()
-        p00.write_text(mlir_text)
-        print(f"  Frontend MLIR saved to: {p00}")
+            mlir_text = frontend_generate_mlir()
+            p00.write_text(mlir_text)
+            print(f"  Frontend MLIR saved to: {p00}")
         print("\nHelion frontend complete.")
 
         # ---- Step 1: Exploration pipeline (stages 0→5) ----
@@ -139,12 +142,13 @@ def main() -> None:
         print(f"  ETG output : {exploration_etg}")
         print()
 
-        run_exploration(
-            input_mlir=p00,
-            df_mlir=args.df_mlir,
-            output_mlir=p01,
-            etg_json=exploration_etg,   # dummy var, when hw analytical model is ready it will replace solver_etg
-        )
+        with PipelineTimer("Step 1: Exploration Pipeline"):
+            run_exploration(
+                input_mlir=p00,
+                df_mlir=args.df_mlir,
+                output_mlir=p01,
+                etg_json=exploration_etg,   # dummy var, when hw analytical model is ready it will replace solver_etg
+            )
 
         print("Exploration pipeline complete.")
 
@@ -163,7 +167,8 @@ def main() -> None:
             debug=args.debug,
         )
 
-        block_sizes = smt_run(smt_args)
+        with PipelineTimer("Step 2: SMT Solver"):
+            block_sizes = smt_run(smt_args)
 
         feasible_count = sum(1 for v in block_sizes.values() if v is not None)
         if feasible_count == 0:
@@ -181,13 +186,15 @@ def main() -> None:
         print(f"  Output : {p02}")
         print()
 
-        run_materialization(
-            input_mlir=p01,
-            block_sizes_json=json.dumps(block_sizes),
-            output_mlir=p02,
-        )
+        with PipelineTimer("Step 3: Materialization"):
+            run_materialization(
+                input_mlir=p01,
+                block_sizes_json=json.dumps(block_sizes),
+                output_mlir=p02,
+            )
 
         print(f"Pipeline complete. Final MLIR written to: {p02}")
+        print_timing_summary()
 
     except Exception:
         raise
