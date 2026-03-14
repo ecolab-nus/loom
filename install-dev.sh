@@ -14,7 +14,7 @@
 
 set -e
 
-REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+REPO_ROOT="$(cd "$(dirname "$0")" && pwd)"
 export MLIR_DIR="${MLIR_DIR:-/opt/llvm-mlir/lib/cmake/mlir}"
 
 # ---------------------------------------------------------------------------
@@ -37,5 +37,3 @@ echo "=== All packages installed in editable mode ==="
 echo "  - loom-dataflow  (import loom_pipeline)"
 echo "  - helion-mlir    (import helion_mlir)"
 echo ""
-echo "Run the orchestrator with:"
-echo "  python loom/orchestrator.py --input-mlir ... --df-mlir ... --output-mlir ..."
