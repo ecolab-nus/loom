@@ -127,8 +127,9 @@ def main() -> None:
             from kernels.matmul import generate_mlir as frontend_generate_mlir  # noqa: PLC0415
 
             mlir_text = frontend_generate_mlir()
-            p00.write_text(mlir_text)
-            print(f"  Frontend MLIR saved to: {p00}")
+            if args.debug:
+                p00.write_text(mlir_text)
+                print(f"  Frontend MLIR saved to: {p00}")
         print("\nHelion frontend complete.")
 
         # ---- Step 1: Exploration pipeline (stages 0→5) ----
@@ -136,19 +137,25 @@ def main() -> None:
         print("=" * 72)
         print("STEP 1: EXPLORATION PIPELINE (stages 0→5)")
         print("=" * 72)
-        print(f"  Input MLIR : {p00}")
         print(f"  DF MLIR    : {args.df_mlir}")
-        print(f"  Output     : {p01}")
+        if args.debug:
+            print(f"  Output     : {p01}")
         print(f"  ETG output : {exploration_etg}")
         print()
 
         with PipelineTimer("Step 1: Exploration Pipeline"):
-            run_exploration(
-                input_mlir=p00,
+            explored_mlir, etg_json_text = run_exploration(
+                input_mlir=mlir_text,
                 df_mlir=args.df_mlir,
-                output_mlir=p01,
-                etg_json=exploration_etg,   # dummy var, when hw analytical model is ready it will replace solver_etg
+                produce_etg=True,
             )
+            # ETG must be written to disk for the SMT solver.
+            exploration_etg.write_text(etg_json_text)
+            if args.debug:
+                p01.write_text(explored_mlir)
+
+        # Free frontend MLIR — no longer needed.
+        del mlir_text
 
         print("Exploration pipeline complete.")
 
@@ -182,16 +189,20 @@ def main() -> None:
         print("=" * 72)
         print("STEP 3: MATERIALIZATION PIPELINE (Materialize → OSB)")
         print("=" * 72)
-        print(f"  Input  : {p01}")
         print(f"  Output : {p02}")
         print()
 
         with PipelineTimer("Step 3: Materialization"):
-            run_materialization(
-                input_mlir=p01,
+            final_mlir = run_materialization(
+                input_mlir=explored_mlir,
                 block_sizes_json=json.dumps(block_sizes),
-                output_mlir=p02,
             )
+
+        # Free explored MLIR — no longer needed.
+        del explored_mlir
+
+        # Always write the final output.
+        p02.write_text(final_mlir)
 
         print(f"Pipeline complete. Final MLIR written to: {p02}")
         print_timing_summary()
