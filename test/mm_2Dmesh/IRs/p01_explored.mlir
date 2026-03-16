@@ -14,9 +14,9 @@ module attributes {loom.block_size_0 = -1 : index, loom.block_size_1 = -1 : inde
   module attributes {loom.block_size_0 = -1 : index, loom.block_size_1 = -1 : index, loom.block_size_2 = -1 : index} {
     func.func @matmul__d0i0_d1i0__f01__d_d(%arg0: memref<4096x512xf32>, %arg1: memref<512x4096xf32>, %arg2: memref<4096x4096xf32>) {
       %cst = arith.constant 0.000000e+00 : f32
-      %12 = loom.get_symbolic_block_size @constraints::@block_size_0 : index
-      %13 = loom.get_symbolic_block_size @constraints::@block_size_1 : index
-      %14 = loom.get_symbolic_block_size @constraints::@block_size_2 : index
+      %12 = loom.sym @block_size_0 : index
+      %13 = loom.sym @block_size_1 : index
+      %14 = loom.sym @block_size_2 : index
       affine.parallel (%arg3) = (0) to (8) {
         affine.parallel (%arg4) = (0) to (8) {
           affine.for %arg5 = 0 to affine_map<()[s0, s1] -> (4096 ceildiv (s0 * 64))>()[%12, %13] {
@@ -59,9 +59,9 @@ module attributes {loom.block_size_0 = -1 : index, loom.block_size_1 = -1 : inde
   module attributes {loom.block_size_0 = -1 : index, loom.block_size_1 = -1 : index, loom.block_size_2 = -1 : index} {
     func.func @matmul__d0i0_d1i0__f01__d_a(%arg0: memref<4096x512xf32>, %arg1: memref<512x4096xf32>, %arg2: memref<4096x4096xf32>) {
       %cst = arith.constant 0.000000e+00 : f32
-      %12 = loom.get_symbolic_block_size @constraints::@block_size_0 : index
-      %13 = loom.get_symbolic_block_size @constraints::@block_size_1 : index
-      %14 = loom.get_symbolic_block_size @constraints::@block_size_2 : index
+      %12 = loom.sym @block_size_0 : index
+      %13 = loom.sym @block_size_1 : index
+      %14 = loom.sym @block_size_2 : index
       affine.parallel (%arg3) = (0) to (8) {
         affine.parallel (%arg4) = (0) to (8) {
           affine.for %arg5 = 0 to affine_map<()[s0, s1] -> (4096 ceildiv (s0 * 64))>()[%12, %13] {
@@ -104,9 +104,9 @@ module attributes {loom.block_size_0 = -1 : index, loom.block_size_1 = -1 : inde
   module attributes {loom.block_size_0 = -1 : index, loom.block_size_1 = -1 : index, loom.block_size_2 = -1 : index} {
     func.func @matmul__d0i0_d1i0__f01__d_h(%arg0: memref<4096x512xf32>, %arg1: memref<512x4096xf32>, %arg2: memref<4096x4096xf32>) {
       %cst = arith.constant 0.000000e+00 : f32
-      %12 = loom.get_symbolic_block_size @constraints::@block_size_0 : index
-      %13 = loom.get_symbolic_block_size @constraints::@block_size_1 : index
-      %14 = loom.get_symbolic_block_size @constraints::@block_size_2 : index
+      %12 = loom.sym @block_size_0 : index
+      %13 = loom.sym @block_size_1 : index
+      %14 = loom.sym @block_size_2 : index
       affine.parallel (%arg3) = (0) to (8) {
         affine.parallel (%arg4) = (0) to (8) {
           affine.for %arg5 = 0 to affine_map<()[s0, s1] -> (4096 ceildiv (s0 * 64))>()[%12, %13] {
@@ -149,9 +149,9 @@ module attributes {loom.block_size_0 = -1 : index, loom.block_size_1 = -1 : inde
   module attributes {loom.block_size_0 = -1 : index, loom.block_size_1 = -1 : index, loom.block_size_2 = -1 : index} {
     func.func @matmul__d0i0_d1i0__f01__d_v(%arg0: memref<4096x512xf32>, %arg1: memref<512x4096xf32>, %arg2: memref<4096x4096xf32>) {
       %cst = arith.constant 0.000000e+00 : f32
-      %12 = loom.get_symbolic_block_size @constraints::@block_size_0 : index
-      %13 = loom.get_symbolic_block_size @constraints::@block_size_1 : index
-      %14 = loom.get_symbolic_block_size @constraints::@block_size_2 : index
+      %12 = loom.sym @block_size_0 : index
+      %13 = loom.sym @block_size_1 : index
+      %14 = loom.sym @block_size_2 : index
       affine.parallel (%arg3) = (0) to (8) {
         affine.parallel (%arg4) = (0) to (8) {
           affine.for %arg5 = 0 to affine_map<()[s0, s1] -> (4096 ceildiv (s0 * 64))>()[%12, %13] {
@@ -194,9 +194,9 @@ module attributes {loom.block_size_0 = -1 : index, loom.block_size_1 = -1 : inde
   module attributes {loom.block_size_0 = -1 : index, loom.block_size_1 = -1 : index, loom.block_size_2 = -1 : index} {
     func.func @matmul__d0i0_d1i0__f10__d_d(%arg0: memref<4096x512xf32>, %arg1: memref<512x4096xf32>, %arg2: memref<4096x4096xf32>) {
       %cst = arith.constant 0.000000e+00 : f32
-      %12 = loom.get_symbolic_block_size @constraints::@block_size_0 : index
-      %13 = loom.get_symbolic_block_size @constraints::@block_size_1 : index
-      %14 = loom.get_symbolic_block_size @constraints::@block_size_2 : index
+      %12 = loom.sym @block_size_0 : index
+      %13 = loom.sym @block_size_1 : index
+      %14 = loom.sym @block_size_2 : index
       affine.parallel (%arg3) = (0) to (8) {
         affine.parallel (%arg4) = (0) to (8) {
           affine.for %arg5 = 0 to affine_map<()[s0, s1] -> (4096 ceildiv s1)>()[%12, %13] {
@@ -239,9 +239,9 @@ module attributes {loom.block_size_0 = -1 : index, loom.block_size_1 = -1 : inde
   module attributes {loom.block_size_0 = -1 : index, loom.block_size_1 = -1 : index, loom.block_size_2 = -1 : index} {
     func.func @matmul__d0i0_d1i0__f10__d_a(%arg0: memref<4096x512xf32>, %arg1: memref<512x4096xf32>, %arg2: memref<4096x4096xf32>) {
       %cst = arith.constant 0.000000e+00 : f32
-      %12 = loom.get_symbolic_block_size @constraints::@block_size_0 : index
-      %13 = loom.get_symbolic_block_size @constraints::@block_size_1 : index
-      %14 = loom.get_symbolic_block_size @constraints::@block_size_2 : index
+      %12 = loom.sym @block_size_0 : index
+      %13 = loom.sym @block_size_1 : index
+      %14 = loom.sym @block_size_2 : index
       affine.parallel (%arg3) = (0) to (8) {
         affine.parallel (%arg4) = (0) to (8) {
           affine.for %arg5 = 0 to affine_map<()[s0, s1] -> (4096 ceildiv s1)>()[%12, %13] {
@@ -284,9 +284,9 @@ module attributes {loom.block_size_0 = -1 : index, loom.block_size_1 = -1 : inde
   module attributes {loom.block_size_0 = -1 : index, loom.block_size_1 = -1 : index, loom.block_size_2 = -1 : index} {
     func.func @matmul__d0i0_d1i0__f10__d_h(%arg0: memref<4096x512xf32>, %arg1: memref<512x4096xf32>, %arg2: memref<4096x4096xf32>) {
       %cst = arith.constant 0.000000e+00 : f32
-      %12 = loom.get_symbolic_block_size @constraints::@block_size_0 : index
-      %13 = loom.get_symbolic_block_size @constraints::@block_size_1 : index
-      %14 = loom.get_symbolic_block_size @constraints::@block_size_2 : index
+      %12 = loom.sym @block_size_0 : index
+      %13 = loom.sym @block_size_1 : index
+      %14 = loom.sym @block_size_2 : index
       affine.parallel (%arg3) = (0) to (8) {
         affine.parallel (%arg4) = (0) to (8) {
           affine.for %arg5 = 0 to affine_map<()[s0, s1] -> (4096 ceildiv s1)>()[%12, %13] {
@@ -329,9 +329,9 @@ module attributes {loom.block_size_0 = -1 : index, loom.block_size_1 = -1 : inde
   module attributes {loom.block_size_0 = -1 : index, loom.block_size_1 = -1 : index, loom.block_size_2 = -1 : index} {
     func.func @matmul__d0i0_d1i0__f10__d_v(%arg0: memref<4096x512xf32>, %arg1: memref<512x4096xf32>, %arg2: memref<4096x4096xf32>) {
       %cst = arith.constant 0.000000e+00 : f32
-      %12 = loom.get_symbolic_block_size @constraints::@block_size_0 : index
-      %13 = loom.get_symbolic_block_size @constraints::@block_size_1 : index
-      %14 = loom.get_symbolic_block_size @constraints::@block_size_2 : index
+      %12 = loom.sym @block_size_0 : index
+      %13 = loom.sym @block_size_1 : index
+      %14 = loom.sym @block_size_2 : index
       affine.parallel (%arg3) = (0) to (8) {
         affine.parallel (%arg4) = (0) to (8) {
           affine.for %arg5 = 0 to affine_map<()[s0, s1] -> (4096 ceildiv s1)>()[%12, %13] {
@@ -374,9 +374,9 @@ module attributes {loom.block_size_0 = -1 : index, loom.block_size_1 = -1 : inde
   module attributes {loom.block_size_0 = -1 : index, loom.block_size_1 = -1 : index, loom.block_size_2 = -1 : index} {
     func.func @matmul__d1i0_d0i0__f01__d_d(%arg0: memref<4096x512xf32>, %arg1: memref<512x4096xf32>, %arg2: memref<4096x4096xf32>) {
       %cst = arith.constant 0.000000e+00 : f32
-      %12 = loom.get_symbolic_block_size @constraints::@block_size_0 : index
-      %13 = loom.get_symbolic_block_size @constraints::@block_size_1 : index
-      %14 = loom.get_symbolic_block_size @constraints::@block_size_2 : index
+      %12 = loom.sym @block_size_0 : index
+      %13 = loom.sym @block_size_1 : index
+      %14 = loom.sym @block_size_2 : index
       affine.parallel (%arg3) = (0) to (8) {
         affine.parallel (%arg4) = (0) to (8) {
           affine.for %arg5 = 0 to affine_map<()[s0, s1] -> (4096 ceildiv (s0 * 64))>()[%12, %13] {
@@ -419,9 +419,9 @@ module attributes {loom.block_size_0 = -1 : index, loom.block_size_1 = -1 : inde
   module attributes {loom.block_size_0 = -1 : index, loom.block_size_1 = -1 : index, loom.block_size_2 = -1 : index} {
     func.func @matmul__d1i0_d0i0__f01__d_a(%arg0: memref<4096x512xf32>, %arg1: memref<512x4096xf32>, %arg2: memref<4096x4096xf32>) {
       %cst = arith.constant 0.000000e+00 : f32
-      %12 = loom.get_symbolic_block_size @constraints::@block_size_0 : index
-      %13 = loom.get_symbolic_block_size @constraints::@block_size_1 : index
-      %14 = loom.get_symbolic_block_size @constraints::@block_size_2 : index
+      %12 = loom.sym @block_size_0 : index
+      %13 = loom.sym @block_size_1 : index
+      %14 = loom.sym @block_size_2 : index
       affine.parallel (%arg3) = (0) to (8) {
         affine.parallel (%arg4) = (0) to (8) {
           affine.for %arg5 = 0 to affine_map<()[s0, s1] -> (4096 ceildiv (s0 * 64))>()[%12, %13] {
@@ -464,9 +464,9 @@ module attributes {loom.block_size_0 = -1 : index, loom.block_size_1 = -1 : inde
   module attributes {loom.block_size_0 = -1 : index, loom.block_size_1 = -1 : index, loom.block_size_2 = -1 : index} {
     func.func @matmul__d1i0_d0i0__f01__d_h(%arg0: memref<4096x512xf32>, %arg1: memref<512x4096xf32>, %arg2: memref<4096x4096xf32>) {
       %cst = arith.constant 0.000000e+00 : f32
-      %12 = loom.get_symbolic_block_size @constraints::@block_size_0 : index
-      %13 = loom.get_symbolic_block_size @constraints::@block_size_1 : index
-      %14 = loom.get_symbolic_block_size @constraints::@block_size_2 : index
+      %12 = loom.sym @block_size_0 : index
+      %13 = loom.sym @block_size_1 : index
+      %14 = loom.sym @block_size_2 : index
       affine.parallel (%arg3) = (0) to (8) {
         affine.parallel (%arg4) = (0) to (8) {
           affine.for %arg5 = 0 to affine_map<()[s0, s1] -> (4096 ceildiv (s0 * 64))>()[%12, %13] {
@@ -509,9 +509,9 @@ module attributes {loom.block_size_0 = -1 : index, loom.block_size_1 = -1 : inde
   module attributes {loom.block_size_0 = -1 : index, loom.block_size_1 = -1 : index, loom.block_size_2 = -1 : index} {
     func.func @matmul__d1i0_d0i0__f01__d_v(%arg0: memref<4096x512xf32>, %arg1: memref<512x4096xf32>, %arg2: memref<4096x4096xf32>) {
       %cst = arith.constant 0.000000e+00 : f32
-      %12 = loom.get_symbolic_block_size @constraints::@block_size_0 : index
-      %13 = loom.get_symbolic_block_size @constraints::@block_size_1 : index
-      %14 = loom.get_symbolic_block_size @constraints::@block_size_2 : index
+      %12 = loom.sym @block_size_0 : index
+      %13 = loom.sym @block_size_1 : index
+      %14 = loom.sym @block_size_2 : index
       affine.parallel (%arg3) = (0) to (8) {
         affine.parallel (%arg4) = (0) to (8) {
           affine.for %arg5 = 0 to affine_map<()[s0, s1] -> (4096 ceildiv (s0 * 64))>()[%12, %13] {
@@ -554,9 +554,9 @@ module attributes {loom.block_size_0 = -1 : index, loom.block_size_1 = -1 : inde
   module attributes {loom.block_size_0 = -1 : index, loom.block_size_1 = -1 : index, loom.block_size_2 = -1 : index} {
     func.func @matmul__d1i0_d0i0__f10__d_d(%arg0: memref<4096x512xf32>, %arg1: memref<512x4096xf32>, %arg2: memref<4096x4096xf32>) {
       %cst = arith.constant 0.000000e+00 : f32
-      %12 = loom.get_symbolic_block_size @constraints::@block_size_0 : index
-      %13 = loom.get_symbolic_block_size @constraints::@block_size_1 : index
-      %14 = loom.get_symbolic_block_size @constraints::@block_size_2 : index
+      %12 = loom.sym @block_size_0 : index
+      %13 = loom.sym @block_size_1 : index
+      %14 = loom.sym @block_size_2 : index
       affine.parallel (%arg3) = (0) to (8) {
         affine.parallel (%arg4) = (0) to (8) {
           affine.for %arg5 = 0 to affine_map<()[s0, s1] -> (4096 ceildiv s1)>()[%12, %13] {
@@ -599,9 +599,9 @@ module attributes {loom.block_size_0 = -1 : index, loom.block_size_1 = -1 : inde
   module attributes {loom.block_size_0 = -1 : index, loom.block_size_1 = -1 : index, loom.block_size_2 = -1 : index} {
     func.func @matmul__d1i0_d0i0__f10__d_a(%arg0: memref<4096x512xf32>, %arg1: memref<512x4096xf32>, %arg2: memref<4096x4096xf32>) {
       %cst = arith.constant 0.000000e+00 : f32
-      %12 = loom.get_symbolic_block_size @constraints::@block_size_0 : index
-      %13 = loom.get_symbolic_block_size @constraints::@block_size_1 : index
-      %14 = loom.get_symbolic_block_size @constraints::@block_size_2 : index
+      %12 = loom.sym @block_size_0 : index
+      %13 = loom.sym @block_size_1 : index
+      %14 = loom.sym @block_size_2 : index
       affine.parallel (%arg3) = (0) to (8) {
         affine.parallel (%arg4) = (0) to (8) {
           affine.for %arg5 = 0 to affine_map<()[s0, s1] -> (4096 ceildiv s1)>()[%12, %13] {
@@ -644,9 +644,9 @@ module attributes {loom.block_size_0 = -1 : index, loom.block_size_1 = -1 : inde
   module attributes {loom.block_size_0 = -1 : index, loom.block_size_1 = -1 : index, loom.block_size_2 = -1 : index} {
     func.func @matmul__d1i0_d0i0__f10__d_h(%arg0: memref<4096x512xf32>, %arg1: memref<512x4096xf32>, %arg2: memref<4096x4096xf32>) {
       %cst = arith.constant 0.000000e+00 : f32
-      %12 = loom.get_symbolic_block_size @constraints::@block_size_0 : index
-      %13 = loom.get_symbolic_block_size @constraints::@block_size_1 : index
-      %14 = loom.get_symbolic_block_size @constraints::@block_size_2 : index
+      %12 = loom.sym @block_size_0 : index
+      %13 = loom.sym @block_size_1 : index
+      %14 = loom.sym @block_size_2 : index
       affine.parallel (%arg3) = (0) to (8) {
         affine.parallel (%arg4) = (0) to (8) {
           affine.for %arg5 = 0 to affine_map<()[s0, s1] -> (4096 ceildiv s1)>()[%12, %13] {
@@ -689,9 +689,9 @@ module attributes {loom.block_size_0 = -1 : index, loom.block_size_1 = -1 : inde
   module attributes {loom.block_size_0 = -1 : index, loom.block_size_1 = -1 : index, loom.block_size_2 = -1 : index} {
     func.func @matmul__d1i0_d0i0__f10__d_v(%arg0: memref<4096x512xf32>, %arg1: memref<512x4096xf32>, %arg2: memref<4096x4096xf32>) {
       %cst = arith.constant 0.000000e+00 : f32
-      %12 = loom.get_symbolic_block_size @constraints::@block_size_0 : index
-      %13 = loom.get_symbolic_block_size @constraints::@block_size_1 : index
-      %14 = loom.get_symbolic_block_size @constraints::@block_size_2 : index
+      %12 = loom.sym @block_size_0 : index
+      %13 = loom.sym @block_size_1 : index
+      %14 = loom.sym @block_size_2 : index
       affine.parallel (%arg3) = (0) to (8) {
         affine.parallel (%arg4) = (0) to (8) {
           affine.for %arg5 = 0 to affine_map<()[s0, s1] -> (4096 ceildiv s1)>()[%12, %13] {
@@ -734,9 +734,9 @@ module attributes {loom.block_size_0 = -1 : index, loom.block_size_1 = -1 : inde
   module attributes {loom.block_size_0 = -1 : index, loom.block_size_1 = -1 : index, loom.block_size_2 = -1 : index} {
     func.func @matmul__d0i0_d1i1__f01__d_d(%arg0: memref<4096x512xf32>, %arg1: memref<512x4096xf32>, %arg2: memref<4096x4096xf32>) {
       %cst = arith.constant 0.000000e+00 : f32
-      %12 = loom.get_symbolic_block_size @constraints::@block_size_0 : index
-      %13 = loom.get_symbolic_block_size @constraints::@block_size_1 : index
-      %14 = loom.get_symbolic_block_size @constraints::@block_size_2 : index
+      %12 = loom.sym @block_size_0 : index
+      %13 = loom.sym @block_size_1 : index
+      %14 = loom.sym @block_size_2 : index
       affine.parallel (%arg3) = (0) to (8) {
         affine.parallel (%arg4) = (0) to (8) {
           affine.for %arg5 = 0 to affine_map<()[s0, s1] -> (4096 ceildiv (s0 * 8))>()[%12, %13] {
@@ -780,9 +780,9 @@ module attributes {loom.block_size_0 = -1 : index, loom.block_size_1 = -1 : inde
   module attributes {loom.block_size_0 = -1 : index, loom.block_size_1 = -1 : index, loom.block_size_2 = -1 : index} {
     func.func @matmul__d0i0_d1i1__f01__d_h(%arg0: memref<4096x512xf32>, %arg1: memref<512x4096xf32>, %arg2: memref<4096x4096xf32>) {
       %cst = arith.constant 0.000000e+00 : f32
-      %12 = loom.get_symbolic_block_size @constraints::@block_size_0 : index
-      %13 = loom.get_symbolic_block_size @constraints::@block_size_1 : index
-      %14 = loom.get_symbolic_block_size @constraints::@block_size_2 : index
+      %12 = loom.sym @block_size_0 : index
+      %13 = loom.sym @block_size_1 : index
+      %14 = loom.sym @block_size_2 : index
       affine.parallel (%arg3) = (0) to (8) {
         affine.parallel (%arg4) = (0) to (8) {
           affine.for %arg5 = 0 to affine_map<()[s0, s1] -> (4096 ceildiv (s0 * 8))>()[%12, %13] {
@@ -826,9 +826,9 @@ module attributes {loom.block_size_0 = -1 : index, loom.block_size_1 = -1 : inde
   module attributes {loom.block_size_0 = -1 : index, loom.block_size_1 = -1 : index, loom.block_size_2 = -1 : index} {
     func.func @matmul__d0i0_d1i1__f01__v_d(%arg0: memref<4096x512xf32>, %arg1: memref<512x4096xf32>, %arg2: memref<4096x4096xf32>) {
       %cst = arith.constant 0.000000e+00 : f32
-      %12 = loom.get_symbolic_block_size @constraints::@block_size_0 : index
-      %13 = loom.get_symbolic_block_size @constraints::@block_size_1 : index
-      %14 = loom.get_symbolic_block_size @constraints::@block_size_2 : index
+      %12 = loom.sym @block_size_0 : index
+      %13 = loom.sym @block_size_1 : index
+      %14 = loom.sym @block_size_2 : index
       affine.parallel (%arg3) = (0) to (8) {
         affine.parallel (%arg4) = (0) to (8) {
           affine.for %arg5 = 0 to affine_map<()[s0, s1] -> (4096 ceildiv (s0 * 8))>()[%12, %13] {
@@ -872,9 +872,9 @@ module attributes {loom.block_size_0 = -1 : index, loom.block_size_1 = -1 : inde
   module attributes {loom.block_size_0 = -1 : index, loom.block_size_1 = -1 : index, loom.block_size_2 = -1 : index} {
     func.func @matmul__d0i0_d1i1__f01__v_h(%arg0: memref<4096x512xf32>, %arg1: memref<512x4096xf32>, %arg2: memref<4096x4096xf32>) {
       %cst = arith.constant 0.000000e+00 : f32
-      %12 = loom.get_symbolic_block_size @constraints::@block_size_0 : index
-      %13 = loom.get_symbolic_block_size @constraints::@block_size_1 : index
-      %14 = loom.get_symbolic_block_size @constraints::@block_size_2 : index
+      %12 = loom.sym @block_size_0 : index
+      %13 = loom.sym @block_size_1 : index
+      %14 = loom.sym @block_size_2 : index
       affine.parallel (%arg3) = (0) to (8) {
         affine.parallel (%arg4) = (0) to (8) {
           affine.for %arg5 = 0 to affine_map<()[s0, s1] -> (4096 ceildiv (s0 * 8))>()[%12, %13] {
@@ -918,9 +918,9 @@ module attributes {loom.block_size_0 = -1 : index, loom.block_size_1 = -1 : inde
   module attributes {loom.block_size_0 = -1 : index, loom.block_size_1 = -1 : index, loom.block_size_2 = -1 : index} {
     func.func @matmul__d0i0_d1i1__f10__d_d(%arg0: memref<4096x512xf32>, %arg1: memref<512x4096xf32>, %arg2: memref<4096x4096xf32>) {
       %cst = arith.constant 0.000000e+00 : f32
-      %12 = loom.get_symbolic_block_size @constraints::@block_size_0 : index
-      %13 = loom.get_symbolic_block_size @constraints::@block_size_1 : index
-      %14 = loom.get_symbolic_block_size @constraints::@block_size_2 : index
+      %12 = loom.sym @block_size_0 : index
+      %13 = loom.sym @block_size_1 : index
+      %14 = loom.sym @block_size_2 : index
       affine.parallel (%arg3) = (0) to (8) {
         affine.parallel (%arg4) = (0) to (8) {
           affine.for %arg5 = 0 to affine_map<()[s0, s1] -> (4096 ceildiv (s1 * 8))>()[%12, %13] {
@@ -964,9 +964,9 @@ module attributes {loom.block_size_0 = -1 : index, loom.block_size_1 = -1 : inde
   module attributes {loom.block_size_0 = -1 : index, loom.block_size_1 = -1 : index, loom.block_size_2 = -1 : index} {
     func.func @matmul__d0i0_d1i1__f10__d_h(%arg0: memref<4096x512xf32>, %arg1: memref<512x4096xf32>, %arg2: memref<4096x4096xf32>) {
       %cst = arith.constant 0.000000e+00 : f32
-      %12 = loom.get_symbolic_block_size @constraints::@block_size_0 : index
-      %13 = loom.get_symbolic_block_size @constraints::@block_size_1 : index
-      %14 = loom.get_symbolic_block_size @constraints::@block_size_2 : index
+      %12 = loom.sym @block_size_0 : index
+      %13 = loom.sym @block_size_1 : index
+      %14 = loom.sym @block_size_2 : index
       affine.parallel (%arg3) = (0) to (8) {
         affine.parallel (%arg4) = (0) to (8) {
           affine.for %arg5 = 0 to affine_map<()[s0, s1] -> (4096 ceildiv (s1 * 8))>()[%12, %13] {
@@ -1010,9 +1010,9 @@ module attributes {loom.block_size_0 = -1 : index, loom.block_size_1 = -1 : inde
   module attributes {loom.block_size_0 = -1 : index, loom.block_size_1 = -1 : index, loom.block_size_2 = -1 : index} {
     func.func @matmul__d0i0_d1i1__f10__v_d(%arg0: memref<4096x512xf32>, %arg1: memref<512x4096xf32>, %arg2: memref<4096x4096xf32>) {
       %cst = arith.constant 0.000000e+00 : f32
-      %12 = loom.get_symbolic_block_size @constraints::@block_size_0 : index
-      %13 = loom.get_symbolic_block_size @constraints::@block_size_1 : index
-      %14 = loom.get_symbolic_block_size @constraints::@block_size_2 : index
+      %12 = loom.sym @block_size_0 : index
+      %13 = loom.sym @block_size_1 : index
+      %14 = loom.sym @block_size_2 : index
       affine.parallel (%arg3) = (0) to (8) {
         affine.parallel (%arg4) = (0) to (8) {
           affine.for %arg5 = 0 to affine_map<()[s0, s1] -> (4096 ceildiv (s1 * 8))>()[%12, %13] {
@@ -1056,9 +1056,9 @@ module attributes {loom.block_size_0 = -1 : index, loom.block_size_1 = -1 : inde
   module attributes {loom.block_size_0 = -1 : index, loom.block_size_1 = -1 : index, loom.block_size_2 = -1 : index} {
     func.func @matmul__d0i0_d1i1__f10__v_h(%arg0: memref<4096x512xf32>, %arg1: memref<512x4096xf32>, %arg2: memref<4096x4096xf32>) {
       %cst = arith.constant 0.000000e+00 : f32
-      %12 = loom.get_symbolic_block_size @constraints::@block_size_0 : index
-      %13 = loom.get_symbolic_block_size @constraints::@block_size_1 : index
-      %14 = loom.get_symbolic_block_size @constraints::@block_size_2 : index
+      %12 = loom.sym @block_size_0 : index
+      %13 = loom.sym @block_size_1 : index
+      %14 = loom.sym @block_size_2 : index
       affine.parallel (%arg3) = (0) to (8) {
         affine.parallel (%arg4) = (0) to (8) {
           affine.for %arg5 = 0 to affine_map<()[s0, s1] -> (4096 ceildiv (s1 * 8))>()[%12, %13] {
@@ -1102,9 +1102,9 @@ module attributes {loom.block_size_0 = -1 : index, loom.block_size_1 = -1 : inde
   module attributes {loom.block_size_0 = -1 : index, loom.block_size_1 = -1 : index, loom.block_size_2 = -1 : index} {
     func.func @matmul__d1i0_d0i1__f01__d_d(%arg0: memref<4096x512xf32>, %arg1: memref<512x4096xf32>, %arg2: memref<4096x4096xf32>) {
       %cst = arith.constant 0.000000e+00 : f32
-      %12 = loom.get_symbolic_block_size @constraints::@block_size_0 : index
-      %13 = loom.get_symbolic_block_size @constraints::@block_size_1 : index
-      %14 = loom.get_symbolic_block_size @constraints::@block_size_2 : index
+      %12 = loom.sym @block_size_0 : index
+      %13 = loom.sym @block_size_1 : index
+      %14 = loom.sym @block_size_2 : index
       affine.parallel (%arg3) = (0) to (8) {
         affine.parallel (%arg4) = (0) to (8) {
           affine.for %arg5 = 0 to affine_map<()[s0, s1] -> (4096 ceildiv (s0 * 8))>()[%12, %13] {
@@ -1148,9 +1148,9 @@ module attributes {loom.block_size_0 = -1 : index, loom.block_size_1 = -1 : inde
   module attributes {loom.block_size_0 = -1 : index, loom.block_size_1 = -1 : index, loom.block_size_2 = -1 : index} {
     func.func @matmul__d1i0_d0i1__f01__d_v(%arg0: memref<4096x512xf32>, %arg1: memref<512x4096xf32>, %arg2: memref<4096x4096xf32>) {
       %cst = arith.constant 0.000000e+00 : f32
-      %12 = loom.get_symbolic_block_size @constraints::@block_size_0 : index
-      %13 = loom.get_symbolic_block_size @constraints::@block_size_1 : index
-      %14 = loom.get_symbolic_block_size @constraints::@block_size_2 : index
+      %12 = loom.sym @block_size_0 : index
+      %13 = loom.sym @block_size_1 : index
+      %14 = loom.sym @block_size_2 : index
       affine.parallel (%arg3) = (0) to (8) {
         affine.parallel (%arg4) = (0) to (8) {
           affine.for %arg5 = 0 to affine_map<()[s0, s1] -> (4096 ceildiv (s0 * 8))>()[%12, %13] {
@@ -1194,9 +1194,9 @@ module attributes {loom.block_size_0 = -1 : index, loom.block_size_1 = -1 : inde
   module attributes {loom.block_size_0 = -1 : index, loom.block_size_1 = -1 : index, loom.block_size_2 = -1 : index} {
     func.func @matmul__d1i0_d0i1__f01__h_d(%arg0: memref<4096x512xf32>, %arg1: memref<512x4096xf32>, %arg2: memref<4096x4096xf32>) {
       %cst = arith.constant 0.000000e+00 : f32
-      %12 = loom.get_symbolic_block_size @constraints::@block_size_0 : index
-      %13 = loom.get_symbolic_block_size @constraints::@block_size_1 : index
-      %14 = loom.get_symbolic_block_size @constraints::@block_size_2 : index
+      %12 = loom.sym @block_size_0 : index
+      %13 = loom.sym @block_size_1 : index
+      %14 = loom.sym @block_size_2 : index
       affine.parallel (%arg3) = (0) to (8) {
         affine.parallel (%arg4) = (0) to (8) {
           affine.for %arg5 = 0 to affine_map<()[s0, s1] -> (4096 ceildiv (s0 * 8))>()[%12, %13] {
@@ -1240,9 +1240,9 @@ module attributes {loom.block_size_0 = -1 : index, loom.block_size_1 = -1 : inde
   module attributes {loom.block_size_0 = -1 : index, loom.block_size_1 = -1 : index, loom.block_size_2 = -1 : index} {
     func.func @matmul__d1i0_d0i1__f01__h_v(%arg0: memref<4096x512xf32>, %arg1: memref<512x4096xf32>, %arg2: memref<4096x4096xf32>) {
       %cst = arith.constant 0.000000e+00 : f32
-      %12 = loom.get_symbolic_block_size @constraints::@block_size_0 : index
-      %13 = loom.get_symbolic_block_size @constraints::@block_size_1 : index
-      %14 = loom.get_symbolic_block_size @constraints::@block_size_2 : index
+      %12 = loom.sym @block_size_0 : index
+      %13 = loom.sym @block_size_1 : index
+      %14 = loom.sym @block_size_2 : index
       affine.parallel (%arg3) = (0) to (8) {
         affine.parallel (%arg4) = (0) to (8) {
           affine.for %arg5 = 0 to affine_map<()[s0, s1] -> (4096 ceildiv (s0 * 8))>()[%12, %13] {
@@ -1286,9 +1286,9 @@ module attributes {loom.block_size_0 = -1 : index, loom.block_size_1 = -1 : inde
   module attributes {loom.block_size_0 = -1 : index, loom.block_size_1 = -1 : index, loom.block_size_2 = -1 : index} {
     func.func @matmul__d1i0_d0i1__f10__d_d(%arg0: memref<4096x512xf32>, %arg1: memref<512x4096xf32>, %arg2: memref<4096x4096xf32>) {
       %cst = arith.constant 0.000000e+00 : f32
-      %12 = loom.get_symbolic_block_size @constraints::@block_size_0 : index
-      %13 = loom.get_symbolic_block_size @constraints::@block_size_1 : index
-      %14 = loom.get_symbolic_block_size @constraints::@block_size_2 : index
+      %12 = loom.sym @block_size_0 : index
+      %13 = loom.sym @block_size_1 : index
+      %14 = loom.sym @block_size_2 : index
       affine.parallel (%arg3) = (0) to (8) {
         affine.parallel (%arg4) = (0) to (8) {
           affine.for %arg5 = 0 to affine_map<()[s0, s1] -> (4096 ceildiv (s1 * 8))>()[%12, %13] {
@@ -1332,9 +1332,9 @@ module attributes {loom.block_size_0 = -1 : index, loom.block_size_1 = -1 : inde
   module attributes {loom.block_size_0 = -1 : index, loom.block_size_1 = -1 : index, loom.block_size_2 = -1 : index} {
     func.func @matmul__d1i0_d0i1__f10__d_v(%arg0: memref<4096x512xf32>, %arg1: memref<512x4096xf32>, %arg2: memref<4096x4096xf32>) {
       %cst = arith.constant 0.000000e+00 : f32
-      %12 = loom.get_symbolic_block_size @constraints::@block_size_0 : index
-      %13 = loom.get_symbolic_block_size @constraints::@block_size_1 : index
-      %14 = loom.get_symbolic_block_size @constraints::@block_size_2 : index
+      %12 = loom.sym @block_size_0 : index
+      %13 = loom.sym @block_size_1 : index
+      %14 = loom.sym @block_size_2 : index
       affine.parallel (%arg3) = (0) to (8) {
         affine.parallel (%arg4) = (0) to (8) {
           affine.for %arg5 = 0 to affine_map<()[s0, s1] -> (4096 ceildiv (s1 * 8))>()[%12, %13] {
@@ -1378,9 +1378,9 @@ module attributes {loom.block_size_0 = -1 : index, loom.block_size_1 = -1 : inde
   module attributes {loom.block_size_0 = -1 : index, loom.block_size_1 = -1 : index, loom.block_size_2 = -1 : index} {
     func.func @matmul__d1i0_d0i1__f10__h_d(%arg0: memref<4096x512xf32>, %arg1: memref<512x4096xf32>, %arg2: memref<4096x4096xf32>) {
       %cst = arith.constant 0.000000e+00 : f32
-      %12 = loom.get_symbolic_block_size @constraints::@block_size_0 : index
-      %13 = loom.get_symbolic_block_size @constraints::@block_size_1 : index
-      %14 = loom.get_symbolic_block_size @constraints::@block_size_2 : index
+      %12 = loom.sym @block_size_0 : index
+      %13 = loom.sym @block_size_1 : index
+      %14 = loom.sym @block_size_2 : index
       affine.parallel (%arg3) = (0) to (8) {
         affine.parallel (%arg4) = (0) to (8) {
           affine.for %arg5 = 0 to affine_map<()[s0, s1] -> (4096 ceildiv (s1 * 8))>()[%12, %13] {
@@ -1424,9 +1424,9 @@ module attributes {loom.block_size_0 = -1 : index, loom.block_size_1 = -1 : inde
   module attributes {loom.block_size_0 = -1 : index, loom.block_size_1 = -1 : index, loom.block_size_2 = -1 : index} {
     func.func @matmul__d1i0_d0i1__f10__h_v(%arg0: memref<4096x512xf32>, %arg1: memref<512x4096xf32>, %arg2: memref<4096x4096xf32>) {
       %cst = arith.constant 0.000000e+00 : f32
-      %12 = loom.get_symbolic_block_size @constraints::@block_size_0 : index
-      %13 = loom.get_symbolic_block_size @constraints::@block_size_1 : index
-      %14 = loom.get_symbolic_block_size @constraints::@block_size_2 : index
+      %12 = loom.sym @block_size_0 : index
+      %13 = loom.sym @block_size_1 : index
+      %14 = loom.sym @block_size_2 : index
       affine.parallel (%arg3) = (0) to (8) {
         affine.parallel (%arg4) = (0) to (8) {
           affine.for %arg5 = 0 to affine_map<()[s0, s1] -> (4096 ceildiv (s1 * 8))>()[%12, %13] {
@@ -1470,9 +1470,9 @@ module attributes {loom.block_size_0 = -1 : index, loom.block_size_1 = -1 : inde
   module attributes {loom.block_size_0 = -1 : index, loom.block_size_1 = -1 : index, loom.block_size_2 = -1 : index} {
     func.func @matmul__d0i1_d1i1__f01__d_d(%arg0: memref<4096x512xf32>, %arg1: memref<512x4096xf32>, %arg2: memref<4096x4096xf32>) {
       %cst = arith.constant 0.000000e+00 : f32
-      %12 = loom.get_symbolic_block_size @constraints::@block_size_0 : index
-      %13 = loom.get_symbolic_block_size @constraints::@block_size_1 : index
-      %14 = loom.get_symbolic_block_size @constraints::@block_size_2 : index
+      %12 = loom.sym @block_size_0 : index
+      %13 = loom.sym @block_size_1 : index
+      %14 = loom.sym @block_size_2 : index
       affine.parallel (%arg3) = (0) to (8) {
         affine.parallel (%arg4) = (0) to (8) {
           affine.for %arg5 = 0 to affine_map<()[s0, s1] -> (4096 ceildiv s0)>()[%12, %13] {
@@ -1515,9 +1515,9 @@ module attributes {loom.block_size_0 = -1 : index, loom.block_size_1 = -1 : inde
   module attributes {loom.block_size_0 = -1 : index, loom.block_size_1 = -1 : index, loom.block_size_2 = -1 : index} {
     func.func @matmul__d0i1_d1i1__f01__a_d(%arg0: memref<4096x512xf32>, %arg1: memref<512x4096xf32>, %arg2: memref<4096x4096xf32>) {
       %cst = arith.constant 0.000000e+00 : f32
-      %12 = loom.get_symbolic_block_size @constraints::@block_size_0 : index
-      %13 = loom.get_symbolic_block_size @constraints::@block_size_1 : index
-      %14 = loom.get_symbolic_block_size @constraints::@block_size_2 : index
+      %12 = loom.sym @block_size_0 : index
+      %13 = loom.sym @block_size_1 : index
+      %14 = loom.sym @block_size_2 : index
       affine.parallel (%arg3) = (0) to (8) {
         affine.parallel (%arg4) = (0) to (8) {
           affine.for %arg5 = 0 to affine_map<()[s0, s1] -> (4096 ceildiv s0)>()[%12, %13] {
@@ -1560,9 +1560,9 @@ module attributes {loom.block_size_0 = -1 : index, loom.block_size_1 = -1 : inde
   module attributes {loom.block_size_0 = -1 : index, loom.block_size_1 = -1 : index, loom.block_size_2 = -1 : index} {
     func.func @matmul__d0i1_d1i1__f01__h_d(%arg0: memref<4096x512xf32>, %arg1: memref<512x4096xf32>, %arg2: memref<4096x4096xf32>) {
       %cst = arith.constant 0.000000e+00 : f32
-      %12 = loom.get_symbolic_block_size @constraints::@block_size_0 : index
-      %13 = loom.get_symbolic_block_size @constraints::@block_size_1 : index
-      %14 = loom.get_symbolic_block_size @constraints::@block_size_2 : index
+      %12 = loom.sym @block_size_0 : index
+      %13 = loom.sym @block_size_1 : index
+      %14 = loom.sym @block_size_2 : index
       affine.parallel (%arg3) = (0) to (8) {
         affine.parallel (%arg4) = (0) to (8) {
           affine.for %arg5 = 0 to affine_map<()[s0, s1] -> (4096 ceildiv s0)>()[%12, %13] {
@@ -1605,9 +1605,9 @@ module attributes {loom.block_size_0 = -1 : index, loom.block_size_1 = -1 : inde
   module attributes {loom.block_size_0 = -1 : index, loom.block_size_1 = -1 : index, loom.block_size_2 = -1 : index} {
     func.func @matmul__d0i1_d1i1__f01__v_d(%arg0: memref<4096x512xf32>, %arg1: memref<512x4096xf32>, %arg2: memref<4096x4096xf32>) {
       %cst = arith.constant 0.000000e+00 : f32
-      %12 = loom.get_symbolic_block_size @constraints::@block_size_0 : index
-      %13 = loom.get_symbolic_block_size @constraints::@block_size_1 : index
-      %14 = loom.get_symbolic_block_size @constraints::@block_size_2 : index
+      %12 = loom.sym @block_size_0 : index
+      %13 = loom.sym @block_size_1 : index
+      %14 = loom.sym @block_size_2 : index
       affine.parallel (%arg3) = (0) to (8) {
         affine.parallel (%arg4) = (0) to (8) {
           affine.for %arg5 = 0 to affine_map<()[s0, s1] -> (4096 ceildiv s0)>()[%12, %13] {
@@ -1650,9 +1650,9 @@ module attributes {loom.block_size_0 = -1 : index, loom.block_size_1 = -1 : inde
   module attributes {loom.block_size_0 = -1 : index, loom.block_size_1 = -1 : index, loom.block_size_2 = -1 : index} {
     func.func @matmul__d0i1_d1i1__f10__d_d(%arg0: memref<4096x512xf32>, %arg1: memref<512x4096xf32>, %arg2: memref<4096x4096xf32>) {
       %cst = arith.constant 0.000000e+00 : f32
-      %12 = loom.get_symbolic_block_size @constraints::@block_size_0 : index
-      %13 = loom.get_symbolic_block_size @constraints::@block_size_1 : index
-      %14 = loom.get_symbolic_block_size @constraints::@block_size_2 : index
+      %12 = loom.sym @block_size_0 : index
+      %13 = loom.sym @block_size_1 : index
+      %14 = loom.sym @block_size_2 : index
       affine.parallel (%arg3) = (0) to (8) {
         affine.parallel (%arg4) = (0) to (8) {
           affine.for %arg5 = 0 to affine_map<()[s0, s1] -> (4096 ceildiv (s1 * 64))>()[%12, %13] {
@@ -1695,9 +1695,9 @@ module attributes {loom.block_size_0 = -1 : index, loom.block_size_1 = -1 : inde
   module attributes {loom.block_size_0 = -1 : index, loom.block_size_1 = -1 : index, loom.block_size_2 = -1 : index} {
     func.func @matmul__d0i1_d1i1__f10__a_d(%arg0: memref<4096x512xf32>, %arg1: memref<512x4096xf32>, %arg2: memref<4096x4096xf32>) {
       %cst = arith.constant 0.000000e+00 : f32
-      %12 = loom.get_symbolic_block_size @constraints::@block_size_0 : index
-      %13 = loom.get_symbolic_block_size @constraints::@block_size_1 : index
-      %14 = loom.get_symbolic_block_size @constraints::@block_size_2 : index
+      %12 = loom.sym @block_size_0 : index
+      %13 = loom.sym @block_size_1 : index
+      %14 = loom.sym @block_size_2 : index
       affine.parallel (%arg3) = (0) to (8) {
         affine.parallel (%arg4) = (0) to (8) {
           affine.for %arg5 = 0 to affine_map<()[s0, s1] -> (4096 ceildiv (s1 * 64))>()[%12, %13] {
@@ -1740,9 +1740,9 @@ module attributes {loom.block_size_0 = -1 : index, loom.block_size_1 = -1 : inde
   module attributes {loom.block_size_0 = -1 : index, loom.block_size_1 = -1 : index, loom.block_size_2 = -1 : index} {
     func.func @matmul__d0i1_d1i1__f10__h_d(%arg0: memref<4096x512xf32>, %arg1: memref<512x4096xf32>, %arg2: memref<4096x4096xf32>) {
       %cst = arith.constant 0.000000e+00 : f32
-      %12 = loom.get_symbolic_block_size @constraints::@block_size_0 : index
-      %13 = loom.get_symbolic_block_size @constraints::@block_size_1 : index
-      %14 = loom.get_symbolic_block_size @constraints::@block_size_2 : index
+      %12 = loom.sym @block_size_0 : index
+      %13 = loom.sym @block_size_1 : index
+      %14 = loom.sym @block_size_2 : index
       affine.parallel (%arg3) = (0) to (8) {
         affine.parallel (%arg4) = (0) to (8) {
           affine.for %arg5 = 0 to affine_map<()[s0, s1] -> (4096 ceildiv (s1 * 64))>()[%12, %13] {
@@ -1785,9 +1785,9 @@ module attributes {loom.block_size_0 = -1 : index, loom.block_size_1 = -1 : inde
   module attributes {loom.block_size_0 = -1 : index, loom.block_size_1 = -1 : index, loom.block_size_2 = -1 : index} {
     func.func @matmul__d0i1_d1i1__f10__v_d(%arg0: memref<4096x512xf32>, %arg1: memref<512x4096xf32>, %arg2: memref<4096x4096xf32>) {
       %cst = arith.constant 0.000000e+00 : f32
-      %12 = loom.get_symbolic_block_size @constraints::@block_size_0 : index
-      %13 = loom.get_symbolic_block_size @constraints::@block_size_1 : index
-      %14 = loom.get_symbolic_block_size @constraints::@block_size_2 : index
+      %12 = loom.sym @block_size_0 : index
+      %13 = loom.sym @block_size_1 : index
+      %14 = loom.sym @block_size_2 : index
       affine.parallel (%arg3) = (0) to (8) {
         affine.parallel (%arg4) = (0) to (8) {
           affine.for %arg5 = 0 to affine_map<()[s0, s1] -> (4096 ceildiv (s1 * 64))>()[%12, %13] {
@@ -1830,9 +1830,9 @@ module attributes {loom.block_size_0 = -1 : index, loom.block_size_1 = -1 : inde
   module attributes {loom.block_size_0 = -1 : index, loom.block_size_1 = -1 : index, loom.block_size_2 = -1 : index} {
     func.func @matmul__d1i1_d0i1__f01__d_d(%arg0: memref<4096x512xf32>, %arg1: memref<512x4096xf32>, %arg2: memref<4096x4096xf32>) {
       %cst = arith.constant 0.000000e+00 : f32
-      %12 = loom.get_symbolic_block_size @constraints::@block_size_0 : index
-      %13 = loom.get_symbolic_block_size @constraints::@block_size_1 : index
-      %14 = loom.get_symbolic_block_size @constraints::@block_size_2 : index
+      %12 = loom.sym @block_size_0 : index
+      %13 = loom.sym @block_size_1 : index
+      %14 = loom.sym @block_size_2 : index
       affine.parallel (%arg3) = (0) to (8) {
         affine.parallel (%arg4) = (0) to (8) {
           affine.for %arg5 = 0 to affine_map<()[s0, s1] -> (4096 ceildiv s0)>()[%12, %13] {
@@ -1875,9 +1875,9 @@ module attributes {loom.block_size_0 = -1 : index, loom.block_size_1 = -1 : inde
   module attributes {loom.block_size_0 = -1 : index, loom.block_size_1 = -1 : index, loom.block_size_2 = -1 : index} {
     func.func @matmul__d1i1_d0i1__f01__a_d(%arg0: memref<4096x512xf32>, %arg1: memref<512x4096xf32>, %arg2: memref<4096x4096xf32>) {
       %cst = arith.constant 0.000000e+00 : f32
-      %12 = loom.get_symbolic_block_size @constraints::@block_size_0 : index
-      %13 = loom.get_symbolic_block_size @constraints::@block_size_1 : index
-      %14 = loom.get_symbolic_block_size @constraints::@block_size_2 : index
+      %12 = loom.sym @block_size_0 : index
+      %13 = loom.sym @block_size_1 : index
+      %14 = loom.sym @block_size_2 : index
       affine.parallel (%arg3) = (0) to (8) {
         affine.parallel (%arg4) = (0) to (8) {
           affine.for %arg5 = 0 to affine_map<()[s0, s1] -> (4096 ceildiv s0)>()[%12, %13] {
@@ -1920,9 +1920,9 @@ module attributes {loom.block_size_0 = -1 : index, loom.block_size_1 = -1 : inde
   module attributes {loom.block_size_0 = -1 : index, loom.block_size_1 = -1 : index, loom.block_size_2 = -1 : index} {
     func.func @matmul__d1i1_d0i1__f01__h_d(%arg0: memref<4096x512xf32>, %arg1: memref<512x4096xf32>, %arg2: memref<4096x4096xf32>) {
       %cst = arith.constant 0.000000e+00 : f32
-      %12 = loom.get_symbolic_block_size @constraints::@block_size_0 : index
-      %13 = loom.get_symbolic_block_size @constraints::@block_size_1 : index
-      %14 = loom.get_symbolic_block_size @constraints::@block_size_2 : index
+      %12 = loom.sym @block_size_0 : index
+      %13 = loom.sym @block_size_1 : index
+      %14 = loom.sym @block_size_2 : index
       affine.parallel (%arg3) = (0) to (8) {
         affine.parallel (%arg4) = (0) to (8) {
           affine.for %arg5 = 0 to affine_map<()[s0, s1] -> (4096 ceildiv s0)>()[%12, %13] {
@@ -1965,9 +1965,9 @@ module attributes {loom.block_size_0 = -1 : index, loom.block_size_1 = -1 : inde
   module attributes {loom.block_size_0 = -1 : index, loom.block_size_1 = -1 : index, loom.block_size_2 = -1 : index} {
     func.func @matmul__d1i1_d0i1__f01__v_d(%arg0: memref<4096x512xf32>, %arg1: memref<512x4096xf32>, %arg2: memref<4096x4096xf32>) {
       %cst = arith.constant 0.000000e+00 : f32
-      %12 = loom.get_symbolic_block_size @constraints::@block_size_0 : index
-      %13 = loom.get_symbolic_block_size @constraints::@block_size_1 : index
-      %14 = loom.get_symbolic_block_size @constraints::@block_size_2 : index
+      %12 = loom.sym @block_size_0 : index
+      %13 = loom.sym @block_size_1 : index
+      %14 = loom.sym @block_size_2 : index
       affine.parallel (%arg3) = (0) to (8) {
         affine.parallel (%arg4) = (0) to (8) {
           affine.for %arg5 = 0 to affine_map<()[s0, s1] -> (4096 ceildiv s0)>()[%12, %13] {
@@ -2010,9 +2010,9 @@ module attributes {loom.block_size_0 = -1 : index, loom.block_size_1 = -1 : inde
   module attributes {loom.block_size_0 = -1 : index, loom.block_size_1 = -1 : index, loom.block_size_2 = -1 : index} {
     func.func @matmul__d1i1_d0i1__f10__d_d(%arg0: memref<4096x512xf32>, %arg1: memref<512x4096xf32>, %arg2: memref<4096x4096xf32>) {
       %cst = arith.constant 0.000000e+00 : f32
-      %12 = loom.get_symbolic_block_size @constraints::@block_size_0 : index
-      %13 = loom.get_symbolic_block_size @constraints::@block_size_1 : index
-      %14 = loom.get_symbolic_block_size @constraints::@block_size_2 : index
+      %12 = loom.sym @block_size_0 : index
+      %13 = loom.sym @block_size_1 : index
+      %14 = loom.sym @block_size_2 : index
       affine.parallel (%arg3) = (0) to (8) {
         affine.parallel (%arg4) = (0) to (8) {
           affine.for %arg5 = 0 to affine_map<()[s0, s1] -> (4096 ceildiv (s1 * 64))>()[%12, %13] {
@@ -2055,9 +2055,9 @@ module attributes {loom.block_size_0 = -1 : index, loom.block_size_1 = -1 : inde
   module attributes {loom.block_size_0 = -1 : index, loom.block_size_1 = -1 : index, loom.block_size_2 = -1 : index} {
     func.func @matmul__d1i1_d0i1__f10__a_d(%arg0: memref<4096x512xf32>, %arg1: memref<512x4096xf32>, %arg2: memref<4096x4096xf32>) {
       %cst = arith.constant 0.000000e+00 : f32
-      %12 = loom.get_symbolic_block_size @constraints::@block_size_0 : index
-      %13 = loom.get_symbolic_block_size @constraints::@block_size_1 : index
-      %14 = loom.get_symbolic_block_size @constraints::@block_size_2 : index
+      %12 = loom.sym @block_size_0 : index
+      %13 = loom.sym @block_size_1 : index
+      %14 = loom.sym @block_size_2 : index
       affine.parallel (%arg3) = (0) to (8) {
         affine.parallel (%arg4) = (0) to (8) {
           affine.for %arg5 = 0 to affine_map<()[s0, s1] -> (4096 ceildiv (s1 * 64))>()[%12, %13] {
@@ -2100,9 +2100,9 @@ module attributes {loom.block_size_0 = -1 : index, loom.block_size_1 = -1 : inde
   module attributes {loom.block_size_0 = -1 : index, loom.block_size_1 = -1 : index, loom.block_size_2 = -1 : index} {
     func.func @matmul__d1i1_d0i1__f10__h_d(%arg0: memref<4096x512xf32>, %arg1: memref<512x4096xf32>, %arg2: memref<4096x4096xf32>) {
       %cst = arith.constant 0.000000e+00 : f32
-      %12 = loom.get_symbolic_block_size @constraints::@block_size_0 : index
-      %13 = loom.get_symbolic_block_size @constraints::@block_size_1 : index
-      %14 = loom.get_symbolic_block_size @constraints::@block_size_2 : index
+      %12 = loom.sym @block_size_0 : index
+      %13 = loom.sym @block_size_1 : index
+      %14 = loom.sym @block_size_2 : index
       affine.parallel (%arg3) = (0) to (8) {
         affine.parallel (%arg4) = (0) to (8) {
           affine.for %arg5 = 0 to affine_map<()[s0, s1] -> (4096 ceildiv (s1 * 64))>()[%12, %13] {
@@ -2145,9 +2145,9 @@ module attributes {loom.block_size_0 = -1 : index, loom.block_size_1 = -1 : inde
   module attributes {loom.block_size_0 = -1 : index, loom.block_size_1 = -1 : index, loom.block_size_2 = -1 : index} {
     func.func @matmul__d1i1_d0i1__f10__v_d(%arg0: memref<4096x512xf32>, %arg1: memref<512x4096xf32>, %arg2: memref<4096x4096xf32>) {
       %cst = arith.constant 0.000000e+00 : f32
-      %12 = loom.get_symbolic_block_size @constraints::@block_size_0 : index
-      %13 = loom.get_symbolic_block_size @constraints::@block_size_1 : index
-      %14 = loom.get_symbolic_block_size @constraints::@block_size_2 : index
+      %12 = loom.sym @block_size_0 : index
+      %13 = loom.sym @block_size_1 : index
+      %14 = loom.sym @block_size_2 : index
       affine.parallel (%arg3) = (0) to (8) {
         affine.parallel (%arg4) = (0) to (8) {
           affine.for %arg5 = 0 to affine_map<()[s0, s1] -> (4096 ceildiv (s1 * 64))>()[%12, %13] {

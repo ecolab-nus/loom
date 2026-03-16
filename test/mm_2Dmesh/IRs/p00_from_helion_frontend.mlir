@@ -1,8 +1,8 @@
 module attributes {loom.block_size_0 = -1 : index, loom.block_size_1 = -1 : index, loom.block_size_2 = -1 : index} {
   func.func @matmul(%x: memref<4096x512xf32>, %y: memref<512x4096xf32>, %out: memref<4096x4096xf32>) {
-    %block_size_0 = loom.get_symbolic_block_size @constraints::@block_size_0 : index
-    %block_size_1 = loom.get_symbolic_block_size @constraints::@block_size_1 : index
-    %block_size_2 = loom.get_symbolic_block_size @constraints::@block_size_2 : index
+    %block_size_0 = loom.sym @block_size_0 : index
+    %block_size_1 = loom.sym @block_size_1 : index
+    %block_size_2 = loom.sym @block_size_2 : index
     %trip_count0 = affine.apply affine_map<()[s0] -> (512 ceildiv s0)>()[%block_size_2]
     %trip_count1 = affine.apply affine_map<()[s0] -> (4096 ceildiv s0)>()[%block_size_0]
     %trip_count2 = affine.apply affine_map<()[s0] -> (4096 ceildiv s0)>()[%block_size_1]
