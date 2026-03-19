@@ -73,6 +73,48 @@ def evaluate_schedule(
     return json.loads(result.stdout)
 
 
+def mock_evaluate_schedule(schedule: dict) -> dict:
+    """Return placeholder scenarios without calling the Rust binary.
+
+    Intended as a stand-in for scopes whose evaluation is not yet supported
+    by the Rust backend (e.g. memory scope).  Each ``Func`` receives a single
+    scenario with ``constraints = "True"`` and ``time_cost = {"Concrete": {"Const": 1}}``.
+    The ``Sequential`` node receives a combined scenario whose cost equals the
+    number of ``Func`` children.
+
+    The return shape matches what :func:`evaluate_schedule` produces so that
+    :func:`resolve_schedule` can merge the result identically.
+    """
+    inner = schedule["Sequential"]
+    schedules = inner.get("schedules", [])
+
+    mock_scenario = {
+        "constraints": "True",
+        "time_cost": {"Concrete": {"Const": 1}},
+    }
+
+    # Fill each Func's scenarios.
+    new_schedules = []
+    func_count = 0
+    for sched in schedules:
+        if "Func" in sched:
+            new_func = {**sched["Func"], "scenarios": [mock_scenario]}
+            new_schedules.append({"Func": new_func})
+            func_count += 1
+        else:
+            new_schedules.append(sched)
+
+    combined_scenario = {
+        "constraints": "True",
+        "time_cost": {"Concrete": {"Const": func_count}},
+    }
+
+    return {
+        "scenarios": [combined_scenario],
+        "schedules": new_schedules,
+    }
+
+
 def _contains_sequential(node) -> bool:
     """Return True if *node* is, or contains anywhere in its subtree, a Sequential.
 
@@ -88,9 +130,35 @@ def _contains_sequential(node) -> bool:
     return False
 
 
+def _fill_func_scenarios(schedules, *, evaluator_path=None, evaluator_fn=None):
+    """Fill empty Func-level scenarios inside *schedules*.
+
+    For each ``Func`` whose ``scenarios`` is empty, wrap it in a trivial
+    single-child Sequential, evaluate, and assign the resulting scenarios
+    back to the Func.
+    """
+    filled = []
+    for sched in schedules:
+        if "Func" in sched and not sched["Func"].get("scenarios"):
+            wrapper = {"Sequential": {"schedules": [sched], "scenarios": []}}
+            if evaluator_fn is not None:
+                result = evaluator_fn(wrapper)
+            else:
+                result = evaluate_schedule(wrapper, evaluator_path=evaluator_path)
+            # The evaluator returns {"scenarios": [...]} for the wrapper
+            # Sequential.  For a single-Func Sequential those are exactly
+            # the Func's own scenarios.
+            func_scenarios = result.get("scenarios", [])
+            filled.append({"Func": {**sched["Func"], "scenarios": func_scenarios}})
+        else:
+            filled.append(sched)
+    return filled
+
+
 def resolve_schedule(
     node,
     evaluator_path: Path | str | None = None,
+    evaluator_fn=None,
 ) -> dict:
     """Walk *node* and evaluate every innermost Sequential with the Rust binary.
 
@@ -115,6 +183,11 @@ def resolve_schedule(
         A Schedule dict (or any JSON value) already parsed from JSON.
     evaluator_path:
         Forwarded to :func:`evaluate_schedule`.
+    evaluator_fn:
+        Optional callable replacing the Rust binary invocation.  When set,
+        ``evaluator_fn({"Sequential": inner})`` is called instead of
+        :func:`evaluate_schedule`.  Useful for mocking (see
+        :func:`mock_evaluate_schedule`).
 
     Returns
     -------
@@ -122,7 +195,7 @@ def resolve_schedule(
         The input with every innermost Sequential filled with evaluated scenarios.
     """
     if isinstance(node, list):
-        return [resolve_schedule(item, evaluator_path) for item in node]
+        return [resolve_schedule(item, evaluator_path, evaluator_fn) for item in node]
 
     if not isinstance(node, dict):
         return node
@@ -137,20 +210,109 @@ def resolve_schedule(
             # Sequential key appears inside a larger dict).
             # Binary returns only the evaluated fields (e.g. {"scenarios": [...]}).
             # Merge back so original fields (schedules, mlir_ref, …) are preserved.
-            evaluated_fields = evaluate_schedule(
-                {"Sequential": inner}, evaluator_path=evaluator_path
-            )
+            if evaluator_fn is not None:
+                evaluated_fields = evaluator_fn({"Sequential": inner})
+            else:
+                evaluated_fields = evaluate_schedule(
+                    {"Sequential": inner}, evaluator_path=evaluator_path
+                )
             filled_inner = {**inner, **evaluated_fields}
+            # Also fill individual Func scenarios if the evaluator didn't
+            # include them (the Rust binary returns only Sequential-level
+            # scenarios, not per-Func ones).
+            filled_inner["schedules"] = _fill_func_scenarios(
+                filled_inner.get("schedules", []),
+                evaluator_path=evaluator_path,
+                evaluator_fn=evaluator_fn,
+            )
             # Preserve any other keys that existed alongside "Sequential" in node.
             return {**node, "Sequential": filled_inner}
         # Has nested Sequentials → recurse into schedules only; other inner
         # fields are left untouched.
-        new_schedules = [resolve_schedule(child, evaluator_path) for child in schedules]
+        new_schedules = [resolve_schedule(child, evaluator_path, evaluator_fn) for child in schedules]
         return {**node, "Sequential": {**inner, "schedules": new_schedules}}
 
     # For any other node (Parallel, Func, custom wrapper, …) recurse into all
     # values generically — no special-casing needed.
-    return {k: resolve_schedule(v, evaluator_path) for k, v in node.items()}
+    return {k: resolve_schedule(v, evaluator_path, evaluator_fn) for k, v in node.items()}
+
+
+# ---------------------------------------------------------------------------
+# Smart JSON formatting — structural keys pretty, expressions compact
+# ---------------------------------------------------------------------------
+
+# Keys that indicate an expression node (should be serialized compactly).
+_EXPR_KEYS = frozenset({
+    "Sym", "Const", "Add", "Sub", "Mul", "Div", "Min", "Max", "Neg",
+    "Ge", "Le", "Gt", "Lt", "Eq", "Ne", "And", "Or", "Not",
+    "Divisible", "Concrete",
+})
+
+
+def _is_expr(obj) -> bool:
+    """Return True if *obj* looks like a symbolic expression node."""
+    if isinstance(obj, dict):
+        if len(obj) == 1 and next(iter(obj)) in _EXPR_KEYS:
+            return True
+        # {"by": ..., "x": ...} inside Divisible is also expression-like.
+        if set(obj.keys()) <= {"by", "x"}:
+            return all(_is_expr(v) for v in obj.values())
+    if isinstance(obj, list):
+        return all(_is_expr(item) for item in obj)
+    if isinstance(obj, (int, float, str)):
+        return True
+    return False
+
+
+def smart_json_dumps(obj, indent=2) -> str:
+    """Serialize *obj* to JSON with hybrid formatting.
+
+    Structural keys (schedules, stages, Func, Sequential, …) are
+    pretty-printed with *indent*.  Expression-like sub-trees (Mul, Add,
+    Sym, Const, constraint nodes, …) are kept compact on a single line.
+    """
+
+    def _fmt(node, depth):
+        pad = " " * (indent * depth)
+        pad_inner = " " * (indent * (depth + 1))
+
+        if not isinstance(node, (dict, list)):
+            return json.dumps(node)
+
+        # Expression sub-trees → compact.
+        if _is_expr(node):
+            return json.dumps(node, separators=(",", ":"))
+
+        if isinstance(node, list):
+            if not node:
+                return "[]"
+            items = [_fmt(item, depth + 1) for item in node]
+            # If all items are compact (no newlines), try single-line.
+            if all("\n" not in item for item in items):
+                one_line = "[" + ", ".join(items) + "]"
+                if len(one_line) + len(pad) <= 120:
+                    return one_line
+            inner = ",\n".join(pad_inner + item for item in items)
+            return "[\n" + inner + "\n" + pad + "]"
+
+        if isinstance(node, dict):
+            if not node:
+                return "{}"
+            parts = []
+            for k, v in node.items():
+                val = _fmt(v, depth + 1)
+                parts.append(f"{json.dumps(k)}: {val}")
+            # Try single-line for small dicts.
+            if all("\n" not in p for p in parts):
+                one_line = "{" + ", ".join(parts) + "}"
+                if len(one_line) + len(pad) <= 120:
+                    return one_line
+            inner = ",\n".join(pad_inner + p for p in parts)
+            return "{\n" + inner + "\n" + pad + "}"
+
+        return json.dumps(node)
+
+    return _fmt(obj, 0)
 
 
 def evaluate_schedule_file(

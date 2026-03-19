@@ -95,7 +95,8 @@ def main() -> None:
 
     # Import the pybind11-based pipeline module and SMT solver.
     # Deferred here so that --help works without a built _loom_pipeline.so.
-    from loom_pipeline import run_exploration, run_materialization, smt_run  # noqa: PLC0415
+    from loom_pipeline import run_exploration, run_materialization  # noqa: PLC0415
+    from smt import smt_run  # noqa: PLC0415
 
     if smt_run is None:
         print("ERROR: SMT solver not available (loom-dataflow not installed in editable mode).")
