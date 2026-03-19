@@ -115,19 +115,7 @@ def mock_evaluate_schedule(schedule: dict) -> dict:
     }
 
 
-def _contains_sequential(node) -> bool:
-    """Return True if *node* is, or contains anywhere in its subtree, a Sequential.
-
-    Walks arbitrary JSON (dicts and lists) so the check is not tied to any
-    specific Schedule variant structure.
-    """
-    if isinstance(node, dict):
-        if "Sequential" in node:
-            return True
-        return any(_contains_sequential(v) for v in node.values())
-    if isinstance(node, list):
-        return any(_contains_sequential(item) for item in node)
-    return False
+from .schedule_utils import contains_sequential as _contains_sequential
 
 
 def _fill_func_scenarios(schedules, *, evaluator_path=None, evaluator_fn=None):

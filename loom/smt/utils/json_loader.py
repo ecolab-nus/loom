@@ -61,11 +61,15 @@ def _validate_variant(v: dict, index: int) -> None:
         if "stages" not in scope:
             raise ValueError(f"{prefix}.{scope_key}: missing 'stages'")
         for j, stage in enumerate(scope["stages"]):
-            if "queues" not in stage:
-                raise ValueError(f"{prefix}.{scope_key}.stages[{j}]: missing 'queues'")
-            for q_name, queue in stage["queues"].items():
-                if "resolved_time" not in queue:
-                    raise ValueError(
-                        f"{prefix}.{scope_key}.stages[{j}].queues['{q_name}']: "
-                        "missing 'resolved_time'"
-                    )
+            sp = f"{prefix}.{scope_key}.stages[{j}]"
+            if "Parallel" not in stage:
+                raise ValueError(f"{sp}: missing 'Parallel'")
+            parallel = stage["Parallel"]
+            if "Sequential" not in parallel:
+                raise ValueError(f"{sp}.Parallel: missing 'Sequential'")
+            seq = parallel["Sequential"]
+            if "scenarios" not in seq:
+                raise ValueError(f"{sp}.Parallel.Sequential: missing 'scenarios'")
+            scenarios = seq["scenarios"]
+            if not isinstance(scenarios, list) or not scenarios:
+                raise ValueError(f"{sp}.Parallel.Sequential.scenarios: must be a non-empty list")

@@ -9,12 +9,21 @@ from typing import TextIO
 
 import z3
 
-from ..core.expr_resolver import resolve_expr
+from ..core.expr_resolver import resolve_expr, resolve_constraint
 
 
 def eval_expr(expr_dict: dict, concrete_map: dict[str, z3.ArithRef]) -> int:
     """Evaluate a JSON Expr to a concrete integer given a concrete symbol map."""
-    return z3.simplify(resolve_expr(expr_dict, concrete_map)).as_long()
+    simplified = z3.simplify(resolve_expr(expr_dict, concrete_map))
+    if hasattr(simplified, "as_long"):
+        return simplified.as_long()
+    # For expressions that don't fully simplify (e.g. integer division),
+    # use a temporary solver to evaluate.
+    tmp = z3.IntVal(0)
+    s = z3.Solver()
+    s.add(tmp == simplified)
+    s.check()
+    return s.model().eval(simplified).as_long()
 
 
 def print_breakdown(
@@ -79,21 +88,23 @@ def print_breakdown(
             stage_id = stage.get("stage_id", "?")
             p(f"    Stage {stage_id}:")
 
-            queue_vals: dict[str, int] = {}
-            for q_name, queue in stage["queues"].items():
-                rt = queue.get("resolved_time")
-                if rt is None:
-                    p(f"      {q_name:12s}  (no resolved_time)")
-                    continue
-                queue_vals[q_name] = eval_expr(rt, concrete_map)
+            seq = stage["Parallel"]["Sequential"]
+            scenarios = seq["scenarios"]
 
-            if queue_vals:
-                stage_max = max(queue_vals.values())
-                for q_name, val in queue_vals.items():
-                    marker = " ← bottleneck" if val == stage_max else ""
-                    p(f"      {q_name:12s}  {val:>10,} cycles{marker}")
-                p(f"      {'(stage max)':12s}  {stage_max:>10,} cycles")
-                scope_total += stage_max
+            matched_idx = None
+            matched_cost = None
+            for si, scenario in enumerate(scenarios):
+                cond_z3 = resolve_constraint(scenario["constraints"], concrete_map)
+                if z3.is_true(z3.simplify(cond_z3)):
+                    matched_idx = si
+                    matched_cost = eval_expr(scenario["time_cost"], concrete_map)
+                    break
+
+            if matched_cost is not None:
+                p(f"      scenario[{matched_idx}]  {matched_cost:>10,} cycles")
+                scope_total += matched_cost
+            else:
+                p(f"      (no scenario matched)")
 
         p(f"  {'→ scope total':16s}  {scope_total:>10,} cycles")
         p()

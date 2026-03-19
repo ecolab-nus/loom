@@ -7,7 +7,7 @@ Supported arithmetic tags:
     Const, Sym, Mul, Add, Div, Min, IfElse
 
 Supported constraint/boolean tags (used in IfElse conditions and hard_constraints):
-    Eq, Ge, Divisible
+    Eq, Ge, Le, And, Divisible, "True" (string literal)
 """
 
 import functools
@@ -75,6 +75,9 @@ def resolve_expr(
         else_z3 = resolve_expr(payload["else_expr"], symbol_map)
         return z3.If(cond_z3, then_z3, else_z3)
 
+    if tag == "Concrete":
+        return resolve_expr(payload, symbol_map)
+
     raise ValueError(f"Unknown Expr tag: '{tag}'")
 
 
@@ -94,6 +97,11 @@ def resolve_constraint(
     Raises:
         ValueError: On unknown tags or malformed structure.
     """
+    if isinstance(expr, str):
+        if expr == "True":
+            return z3.BoolVal(True)
+        raise ValueError(f"Unknown constraint string: {expr!r}")
+
     if not isinstance(expr, dict) or len(expr) != 1:
         raise ValueError(f"Expected a single-key dict for constraint, got: {expr!r}")
 
@@ -106,6 +114,15 @@ def resolve_constraint(
     if tag == "Ge":
         _check_binary(tag, payload)
         return resolve_expr(payload[0], symbol_map) >= resolve_expr(payload[1], symbol_map)
+
+    if tag == "Le":
+        _check_binary(tag, payload)
+        return resolve_expr(payload[0], symbol_map) <= resolve_expr(payload[1], symbol_map)
+
+    if tag == "And":
+        _check_variadic(tag, payload)
+        args = [resolve_constraint(a, symbol_map) for a in payload]
+        return z3.And(*args)
 
     if tag == "Divisible":
         x_z3 = resolve_expr(payload["x"], symbol_map)

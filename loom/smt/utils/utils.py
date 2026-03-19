@@ -25,11 +25,11 @@ def powers_of_2_range(lo: int, hi: int) -> list[int]:
 def default_symbol_domains() -> dict[str, list[int]]:
     """Return the default allowed values for each block-size symbol.
 
-    BM, BN: powers of 2 from 32 to 4096.
-    BK:     powers of 2 from 32 to 512.
+    M, N: powers of 2 from 32 to 4096.
+    K:    powers of 2 from 32 to 512.
     """
     return {
-        "BM": powers_of_2_range(32, 4096),
-        "BN": powers_of_2_range(32, 4096),
-        "BK": powers_of_2_range(32, 512),
+        "M": powers_of_2_range(32, 4096),
+        "N": powers_of_2_range(32, 4096),
+        "K": powers_of_2_range(32, 512),
     }
