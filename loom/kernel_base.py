@@ -38,12 +38,15 @@ CLI produced (inherited from LoomKernel)
 ----------------------------------------
 ::
 
+    # Recommended: load paths from a config file
+    python kernels/matmul.py --config kernels/config.json [--njobs N] [--debug]
+
+    # Or pass paths directly on the command line
     python kernels/matmul.py \\
         --output-path  DIR \\
         --df-mlir      PATH \\
         --hw-compute-dir PATH \\
-        [--njobs N] \\
-        [--debug]
+        [--njobs N] [--debug]
 """
 from __future__ import annotations
 

@@ -2,12 +2,7 @@
 
 Standalone CLI script. Run from the repo root:
 
-    python kernels/matmul.py \
-        --output-path  test/mm_2Dmesh \
-        --df-mlir      third_party/loom-dataflow/test/Dialect/DataflowDialect/2D_mesh.mlir \
-        --hw-compute-dir third_party/loom-mlar/tests/2d_mesh/compute \
-        --njobs 16 \
-        --debug
+    python kernels/matmul.py --config kernels/config.json --njobs 16 --debug
 
 This script inherits the full Loom CLI and pipeline from LoomKernel.
 To write your own kernel, copy this file, replace the kernel body
