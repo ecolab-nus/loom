@@ -1,42 +1,44 @@
-"""End-to-end Loom pipeline orchestrator.
+"""Loom end-to-end compilation pipeline — library interface.
 
-Runs the full Loom compilation pipeline:
-  0. Helion frontend: Python kernel → stage-00 MLIR
-  1. Exploration pipeline (stages 0→5): C++ passes via pybind11
-  2. ETG resolution: fill scenarios via MLAR Rust evaluator
-  3. SMT solver: finds optimal block sizes per variant
-  4. Materialization pipeline (stages 5→7): C++ passes via pybind11
+This module is the sole owner of all pipeline logic. It exposes:
 
-Output layout under --output-path:
-  <output-path>/IRs/p00_from_helion_frontend.mlir   (when --debug)
-  <output-path>/IRs/p01_explored.mlir               (when --debug)
-  <output-path>/IRs/p03_bufferized.mlir
-  <output-path>/constraints/p01_exploration_etg.json
-  <output-path>/constraints/p02_resolved_etg.json
-  <output-path>/constraints/smt_solver.log           (when --debug)
+    run_pipeline(generate_mlir_fn, *, output_path, df_mlir,
+                 hw_compute_dir, njobs, debug)
 
-Usage:
-    python loom/orchestrator.py \
-        --output-path    test/mm_2Dmesh \
-        --df-mlir        path/to/2D_mesh.mlir \
-        --hw-compute-dir path/to/compute/ \
-        [--njobs N] \
-        [--debug]
+where ``generate_mlir_fn`` is any callable that returns stage-00 MLIR
+text.  The function is injected by the caller (usually a ``LoomKernel``
+subclass), so the pipeline has **no dependency on any kernel module**.
 
-Python environment: /opt/miniconda3/envs/loom-dev/bin/python
-Required packages: z3-solver, pybind11 (build-time)
+Pipeline stages
+---------------
+  0. Helion frontend   – call ``generate_mlir_fn()`` → raw MLIR text
+  1. Exploration        – C++ passes via pybind11 (loom_pipeline)
+  2. ETG resolution     – MLAR Rust evaluator (loom_utils)
+  3. SMT solver         – Z3-based block-size optimizer (loom.smt)
+  4. Materialization    – C++ passes via pybind11 (loom_pipeline)
+
+Output layout under <output_path>
+----------------------------------
+  IRs/p00_from_helion_frontend.mlir   (--debug only)
+  IRs/p01_explored.mlir               (--debug only)
+  IRs/p03_bufferized.mlir
+  constraints/p01_exploration_etg.json
+  constraints/p02_resolved_etg.json
+  constraints/smt_solver.log          (--debug only)
 """
-import argparse
+from __future__ import annotations
+
 import json
 import logging
 import sys
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
-from loom_utils.timer import pipeline_timer, print_timing_summary
+from loom.loom_utils.timer import pipeline_timer, print_timing_summary
+
 
 # ---------------------------------------------------------------------------
-# Logging configuration
+# Logging
 # ---------------------------------------------------------------------------
 
 def setup_logging(debug: bool = False) -> None:
@@ -51,64 +53,21 @@ def setup_logging(debug: bool = False) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Argument parsing
+# Pipeline steps
 # ---------------------------------------------------------------------------
 
-def _build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(
-        description=(
-            "Loom end-to-end pipeline: "
-            "Helion frontend → Explore → ETG resolve → SMT solve → Materialize → OSB → final MLIR."
-        )
-    )
-    parser.add_argument(
-        "--output-path",
-        required=True,
-        metavar="DIR",
-        help="Root output directory. MLIRs go to <DIR>/IRs/, logs/JSON to <DIR>/constraints/.",
-    )
-    parser.add_argument(
-        "--df-mlir",
-        required=True,
-        metavar="MLIR",
-        help="Path to DF hardware description MLIR (e.g. 2D_mesh.mlir).",
-    )
-    parser.add_argument(
-        "--hw-compute-dir",
-        required=True,
-        metavar="DIR",
-        help="Path to directory containing hardware compute IR (.mlir) files.",
-    )
-    parser.add_argument(
-        "--njobs",
-        type=int,
-        default=1,
-        metavar="N",
-        help="Number of parallel workers for ETG resolution and SMT solving (default: 1).",
-    )
-    parser.add_argument(
-        "--debug",
-        action="store_true",
-        default=False,
-        help="Enable detailed SMT analysis (active constraints, MUS) and write solver log.",
-    )
-    return parser
-
-
-# ---------------------------------------------------------------------------
-# Pipeline Steps
-# ---------------------------------------------------------------------------
-
-def run_step_0_frontend(ir_dir: Path, debug: bool) -> str:
-    """Step 0: Helion frontend (Python kernel → stage-00 MLIR)."""
+def run_step_0_frontend(
+    generate_mlir_fn: Callable[[], str],
+    ir_dir: Path,
+    debug: bool,
+) -> str:
+    """Step 0: Call the kernel's generate_mlir callable to produce stage-00 MLIR."""
     logging.info("=" * 72)
     logging.info("STEP 0: HELION FRONTEND (generating stage-00 MLIR)")
     logging.info("=" * 72)
 
     with pipeline_timer("Step 0: Helion Frontend"):
-        from kernels.matmul import generate_mlir as frontend_generate_mlir  # noqa: PLC0415
-
-        mlir_text = frontend_generate_mlir()
+        mlir_text = generate_mlir_fn()
         if debug:
             p00 = ir_dir / "p00_from_helion_frontend.mlir"
             p00.write_text(mlir_text)
@@ -168,7 +127,7 @@ def run_step_2_etg_resolution(
     logging.info("STEP 2: ETG RESOLUTION (MLAR evaluator)")
     logging.info("=" * 72)
 
-    from loom_utils.mlar_evaluator import resolve_etg_variants, smart_json_dumps  # noqa: PLC0415
+    from loom.loom_utils.mlar_evaluator import resolve_etg_variants, smart_json_dumps  # noqa: PLC0415
 
     resolved_etg = constraints_dir / "p02_resolved_etg.json"
     logging.info(f"  Output : {resolved_etg}")
@@ -195,7 +154,7 @@ def run_step_3_smt_solve(
     logging.info("=" * 72)
     logging.info(f"  ETG input  : {resolved_etg_path}")
 
-    from smt import smt_run  # noqa: PLC0415
+    from loom.smt import smt_run  # noqa: PLC0415
 
     if smt_run is None:
         logging.error("SMT solver not available (loom-dataflow not installed in editable mode).")
@@ -247,48 +206,62 @@ def run_step_4_materialization(
 
 
 # ---------------------------------------------------------------------------
-# Main
+# Public API — single entry point
 # ---------------------------------------------------------------------------
 
-def main() -> None:
-    parser = _build_parser()
-    args = parser.parse_args()
+def run_pipeline(
+    generate_mlir_fn: Callable[[], str],
+    *,
+    output_path: str | Path,
+    df_mlir: str | Path,
+    hw_compute_dir: str | Path,
+    njobs: int = 1,
+    debug: bool = False,
+) -> None:
+    """Run the full Loom compilation pipeline.
 
-    setup_logging(args.debug)
-
-    output_path = Path(args.output_path)
+    Parameters
+    ----------
+    generate_mlir_fn:
+        A zero-argument callable that returns the stage-00 MLIR text for
+        the kernel.  Typically ``MyKernel.generate_mlir``.
+    output_path:
+        Root output directory.  Sub-directories ``IRs/`` and
+        ``constraints/`` are created automatically.
+    df_mlir:
+        Path to the DF hardware description MLIR file.
+    hw_compute_dir:
+        Path to the directory containing hardware compute IR (.mlir) files.
+    njobs:
+        Number of parallel workers for ETG resolution and SMT solving.
+    debug:
+        Enable detailed SMT analysis and write intermediate IRs/logs.
+    """
+    output_path = Path(output_path)
     ir_dir = output_path / "IRs"
     constraints_dir = output_path / "constraints"
     ir_dir.mkdir(parents=True, exist_ok=True)
     constraints_dir.mkdir(parents=True, exist_ok=True)
 
     # Step 0: Helion frontend
-    mlir_text = run_step_0_frontend(ir_dir, args.debug)
+    mlir_text = run_step_0_frontend(generate_mlir_fn, ir_dir, debug)
 
-    # Step 1: Exploration pipeline
-    explored_mlir, etg_json_text = run_exploration_step(
-        mlir_text, args.df_mlir, args.hw_compute_dir, ir_dir, constraints_dir, args.debug
+    # Step 1: Exploration
+    explored_mlir, etg_json_text = run_step_1_exploration(
+        mlir_text, str(df_mlir), str(hw_compute_dir), ir_dir, constraints_dir, debug
     )
-    del mlir_text  # Free memory
+    del mlir_text
 
     # Step 2: ETG resolution
-    run_step_2_etg_resolution(etg_json_text, args.njobs, constraints_dir)
-    del etg_json_text  # Free memory
+    run_step_2_etg_resolution(etg_json_text, njobs, constraints_dir)
+    del etg_json_text
 
     # Step 3: SMT Solver
     resolved_etg_path = constraints_dir / "p02_resolved_etg.json"
-    block_sizes = run_step_3_smt_solve(resolved_etg_path, args.njobs, args.debug, constraints_dir)
+    block_sizes = run_step_3_smt_solve(resolved_etg_path, njobs, debug, constraints_dir)
 
     # Step 4: Materialization
     run_step_4_materialization(explored_mlir, block_sizes, ir_dir)
-    del explored_mlir  # Free memory
+    del explored_mlir
 
     print_timing_summary()
-
-
-# Backward compatibility for Step 1 function name
-run_exploration_step = run_step_1_exploration
-
-
-if __name__ == "__main__":
-    main()

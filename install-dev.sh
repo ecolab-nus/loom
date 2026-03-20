@@ -1,6 +1,7 @@
 #!/bin/bash
 # Developer install script for the Loom monorepo.
 #
+# ---------------------------------------------------------------------------
 # Installs all three packages in editable mode in the correct order:
 #   1. loom-dataflow  (triggers CMake build for C++ pipeline)
 #   2. helion-mlir    (pure Python)
@@ -33,7 +34,12 @@ echo "=== Installing helion-mlir (editable) ==="
 pip install -e "$REPO_ROOT/third_party/helion-mlir"
 
 echo ""
+echo "=== Installing loom (editable) ==="
+pip install -e "$REPO_ROOT"
+
+echo ""
 echo "=== All packages installed in editable mode ==="
 echo "  - loom-dataflow  (import loom_pipeline)"
 echo "  - helion-mlir    (import helion_mlir)"
+echo "  - loom           (import loom)"
 echo ""
