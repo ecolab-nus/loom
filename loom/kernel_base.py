@@ -194,6 +194,7 @@ class LoomKernel:
         output_path = args.output_path or config_data.get("output_path")
         df_mlir = args.df_mlir or config_data.get("df_mlir")
         hw_compute_dir = args.hw_compute_dir or config_data.get("hw_compute_dir")
+        block_sizes = config_data.get("block_sizes")
 
         # Required parameter check
         missing = []
@@ -207,6 +208,9 @@ class LoomKernel:
         if missing:
             parser.error(f"The following parameters are required: {', '.join(missing)}")
 
+        if block_sizes is not None and not isinstance(block_sizes, dict):
+            parser.error("Config 'block_sizes' must be a JSON object mapping symbol names to integers.")
+
         setup_logging(args.debug)
         run_pipeline(
             generate_mlir_fn=cls.generate_mlir,
@@ -215,4 +219,5 @@ class LoomKernel:
             hw_compute_dir=hw_compute_dir,
             njobs=args.njobs,
             debug=args.debug,
+            block_sizes=block_sizes,
         )

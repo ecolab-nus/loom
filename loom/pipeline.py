@@ -206,6 +206,52 @@ def run_step_4_materialization(
 
 
 # ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+def validate_and_broadcast_block_sizes(
+    manual_block_sizes: dict[str, int],
+    etg_json_text: str,
+) -> dict[str, dict[str, int]]:
+    """Validate that manual block sizes cover all ETG symbols and broadcast to all variants.
+
+    Parameters
+    ----------
+    manual_block_sizes:
+        A single dictionary of {symbol_name: value}.
+    etg_json_text:
+        The raw ETG JSON string from Step 1.
+
+    Returns
+    -------
+    A broadcast dict compatible with Step 4: {variant_name: manual_block_sizes}.
+    """
+    variants = json.loads(etg_json_text)
+    if not variants:
+        return {}
+
+    # Extract all unique symbols required by any variant
+    required_symbols = set()
+    for v in variants:
+        symbols = v.get("constraint_scope", {}).get("metadata", {}).get("symbols", {})
+        required_symbols.update(symbols.keys())
+
+    # Guard: check coverage
+    missing = [s for s in required_symbols if s not in manual_block_sizes]
+    if missing:
+        raise ValueError(
+            f"Manual block_sizes are missing values for the following symbols "
+            f"required by the ETG: {', '.join(sorted(missing))}"
+        )
+
+    # Broadcast
+    return {
+        v.get("variant_name", f"variant_{i}"): manual_block_sizes
+        for i, v in enumerate(variants)
+    }
+
+
+# ---------------------------------------------------------------------------
 # Public API — single entry point
 # ---------------------------------------------------------------------------
 
@@ -217,6 +263,7 @@ def run_pipeline(
     hw_compute_dir: str | Path,
     njobs: int = 1,
     debug: bool = False,
+    block_sizes: dict[str, int] | None = None,
 ) -> None:
     """Run the full Loom compilation pipeline.
 
@@ -236,6 +283,9 @@ def run_pipeline(
         Number of parallel workers for ETG resolution and SMT solving.
     debug:
         Enable detailed SMT analysis and write intermediate IRs/logs.
+    block_sizes:
+        Optional manual block size overrides. If provided, Steps 2 and 3
+        (ETG resolution and SMT solving) are skipped.
     """
     output_path = Path(output_path)
     ir_dir = output_path / "IRs"
@@ -252,16 +302,23 @@ def run_pipeline(
     )
     del mlir_text
 
-    # Step 2: ETG resolution
-    run_step_2_etg_resolution(etg_json_text, njobs, constraints_dir)
+    # Step 2: ETG resolution & Step 3: SMT Solver
+    if block_sizes is not None:
+        logging.info("")
+        logging.info("⏭  block_sizes provided in config — skipping Steps 2 & 3.")
+        broadcast = validate_and_broadcast_block_sizes(block_sizes, etg_json_text)
+    else:
+        # Step 2: ETG resolution
+        run_step_2_etg_resolution(etg_json_text, njobs, constraints_dir)
+
+        # Step 3: SMT Solver
+        resolved_etg_path = constraints_dir / "p02_resolved_etg.json"
+        broadcast = run_step_3_smt_solve(resolved_etg_path, njobs, debug, constraints_dir)
+
     del etg_json_text
 
-    # Step 3: SMT Solver
-    resolved_etg_path = constraints_dir / "p02_resolved_etg.json"
-    block_sizes = run_step_3_smt_solve(resolved_etg_path, njobs, debug, constraints_dir)
-
     # Step 4: Materialization
-    run_step_4_materialization(explored_mlir, block_sizes, ir_dir)
+    run_step_4_materialization(explored_mlir, broadcast, ir_dir)
     del explored_mlir
 
     print_timing_summary()

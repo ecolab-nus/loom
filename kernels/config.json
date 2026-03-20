@@ -1,5 +1,10 @@
 {
     "output_path": "test/mm_2Dmesh",
     "df_mlir": "third_party/loom-dataflow/test/Dialect/DataflowDialect/2D_mesh.mlir",
-    "hw_compute_dir": "third_party/loom-mlar/tests/2d_mesh/compute"
+    "hw_compute_dir": "third_party/loom-mlar/tests/2d_mesh/compute",
+    "block_sizes": {
+        "block_size_0": 128,
+        "block_size_1": 32,
+        "block_size_2": 128
+    }
 }
