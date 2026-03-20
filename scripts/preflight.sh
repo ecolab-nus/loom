@@ -174,10 +174,11 @@ check_cargo() {
         ver=$(rustc --version | grep -oP '[0-9]+\.[0-9]+\.[0-9]+')
         _ok "Rust toolchain (rustc $ver)"
     else
-        _warn "cargo/rustc not found — loom-mlar eval_core binary will not be built"
-        _hint "Install: curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh"
+        _fail "cargo/rustc not found"
+        _hint "Install Rust: curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh"
+        _hint "Then restart your shell and re-run this script."
         LOOM_HAS_CARGO=0
-        (( _PREFLIGHT_WARNINGS++ ))
+        (( _PREFLIGHT_ERRORS++ ))
     fi
 }
 
