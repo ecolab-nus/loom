@@ -1,24 +1,50 @@
 """Core scheduling evaluation logic for the Loom pipeline."""
 
 import json
+import os
+import shutil
 import subprocess
 from pathlib import Path
 
 from .schedule_utils import contains_sequential as _contains_sequential
 
-# Path to the evaluator binary relative to the repo root.
-# TODO: This hardcoded path should be made configurable once the pipeline 
-# moves beyond the 2D mesh prototype.
 _REPO_ROOT = Path(__file__).resolve().parents[2]
-_DEFAULT_EVALUATOR = (
-    _REPO_ROOT
-    / "third_party"
-    / "loom-mlar"
-    / "tests"
-    / "2d_mesh"
-    / "evaluators"
-    / "eval_core"
-)
+
+
+def _find_default_evaluator() -> Path | None:
+    """Locate the eval_core binary using a cascading search.
+
+    Search order:
+    1. LOOM_EVAL_CORE environment variable (explicit override)
+    2. $REPO_ROOT/third_party/loom-mlar/bin/eval_core (canonical build output)
+    3. $REPO_ROOT/third_party/loom-mlar/tests/2d_mesh/evaluators/eval_core (legacy)
+    4. 'eval_core' on $PATH (system-installed)
+    """
+    env_path = os.environ.get("LOOM_EVAL_CORE")
+    if env_path:
+        p = Path(env_path)
+        if p.is_file():
+            return p
+
+    canonical = _REPO_ROOT / "third_party" / "loom-mlar" / "bin" / "eval_core"
+    if canonical.is_file():
+        return canonical
+
+    legacy = (
+        _REPO_ROOT / "third_party" / "loom-mlar" / "tests"
+        / "2d_mesh" / "evaluators" / "eval_core"
+    )
+    if legacy.is_file():
+        return legacy
+
+    system = shutil.which("eval_core")
+    if system:
+        return Path(system)
+
+    return None
+
+
+_DEFAULT_EVALUATOR = _find_default_evaluator()
 
 
 def evaluate_schedule(
@@ -27,6 +53,11 @@ def evaluate_schedule(
 ) -> dict:
     """Run the MLAR evaluator on *schedule* and return the evaluated result."""
     binary = Path(evaluator_path) if evaluator_path is not None else _DEFAULT_EVALUATOR
+    if binary is None:
+        raise FileNotFoundError(
+            "eval_core binary not found. Build it with: bash scripts/build-mlar.sh\n"
+            "Or set LOOM_EVAL_CORE=/path/to/eval_core"
+        )
     if not binary.exists():
         raise FileNotFoundError(f"Evaluator binary not found: {binary}")
 

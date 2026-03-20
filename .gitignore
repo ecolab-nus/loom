@@ -2,3 +2,9 @@
 *.egg-info/
 __pycache__/
 *.py[cod]
+dist/
+build/
+*.so
+
+# Rust build artifacts
+third_party/loom-mlar/bin/

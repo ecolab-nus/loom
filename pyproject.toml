@@ -6,6 +6,15 @@ build-backend = "setuptools.build_meta"
 name = "loom"
 version = "0.1.0.dev0"
 requires-python = ">=3.10"
+dependencies = [
+    "z3-solver",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "ruff",
+]
 
 [tool.setuptools.packages.find]
 where = ["."]
