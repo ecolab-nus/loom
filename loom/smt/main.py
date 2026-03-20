@@ -19,9 +19,11 @@ Arguments:
 import argparse
 import sys
 from concurrent.futures import ProcessPoolExecutor, as_completed
+from pathlib import Path
+from typing import Any
 
 from .utils.json_loader import load_variants
-from .utils.utils import default_symbol_domains
+from .utils.utils import default_symbol_domains, get_variant_name
 from .utils.reporter import (
     print_breakdown, print_unsat_core,
     print_active_constraints, print_mus, print_result_summary,
@@ -92,20 +94,72 @@ def solve_variant(
 # Main pipeline
 # ---------------------------------------------------------------------------
 
-def run(args: argparse.Namespace) -> dict[str, dict[str, int] | None]:
-    variants = load_variants(args.input)
+def _write_detailed_log(
+    results: list[dict], 
+    output_path: Path | str, 
+    total: int, 
+    debug: bool = False
+) -> None:
+    """Write per-variant details to log file, ordered by original index."""
+    with open(output_path, "w", encoding="utf-8") as log:
+        for r in results:
+            vname = get_variant_name(r["variant"], r["index"])
+            if r["min_val"] is None:
+                print(
+                    f"Variant [{r['index']}/{total - 1}]: {vname}  UNSAT\n",
+                    file=log,
+                )
+                if debug and r.get("mus"):
+                    print_mus(vname, r["mus"], file=log)
+                elif debug and r.get("unsat_core"):
+                    print_unsat_core(
+                        vname, r["unsat_core"],
+                        context="Infeasible", file=log,
+                    )
+            else:
+                if debug:
+                    print_breakdown(
+                        r["variant"], r["assignments"],
+                        r["min_val"], r["index"], total,
+                        file=log,
+                    )
+                    if r.get("active_constraints"):
+                        print_active_constraints(
+                            vname, r["active_constraints"], file=log,
+                        )
+                    if r.get("unsat_core"):
+                        print_unsat_core(
+                            vname, r["unsat_core"],
+                            context=f"Optimum bound T>={r['min_val']}",
+                            file=log,
+                        )
+                else:
+                    print_result_summary(
+                        vname, r["assignments"],
+                        r["min_val"], r["index"], total,
+                        file=log,
+                    )
+                print("-" * 72, file=log)
+    print(f"\nPer-variant log written to: {output_path}")
+
+
+def run(
+    input_path: Path | str,
+    njobs: int = 1,
+    output_path: Path | str | None = None,
+    debug: bool = False,
+) -> dict[str, dict[str, int] | None]:
+    """Execute the SMT solver on the provided ETG variants."""
+    variants = load_variants(input_path)
     total = len(variants)
     domains = default_symbol_domains()
 
-    print(f"Solving {total} variants with {args.njobs} process(es)...")
+    print(f"Solving {total} variants with {njobs} process(es)...")
     print()
 
-    debug = getattr(args, "debug", False)
-
     # Dispatch all variants to a process pool.
-    # Progress is printed by the main process as each future completes.
     results: list[dict] = [None] * total
-    with ProcessPoolExecutor(max_workers=args.njobs) as pool:
+    with ProcessPoolExecutor(max_workers=njobs) as pool:
         futures = {
             pool.submit(solve_variant, v, i, total, domains, debug): i
             for i, v in enumerate(variants)
@@ -115,59 +169,19 @@ def run(args: argparse.Namespace) -> dict[str, dict[str, int] | None]:
             r = future.result()
             results[r["index"]] = r
             completed += 1
-            variant_name = r["variant"].get("variant_name", f"variant_{r['index']}")
+            variant_name = get_variant_name(r["variant"], r["index"])
             if r["min_val"] is None:
                 print(f"[{completed:3d}/{total}] {variant_name}  UNSAT")
             else:
                 print(f"[{completed:3d}/{total}] {variant_name}  T={r['min_val']:,} cycles")
 
-    # Write per-variant details to log file, ordered by original index.
-    if args.output:
-        with open(args.output, "w", encoding="utf-8") as log:
-            for r in results:
-                vname = r["variant"].get("variant_name", "?")
-                if r["min_val"] is None:
-                    print(
-                        f"Variant [{r['index']}/{total - 1}]: {vname}  UNSAT\n",
-                        file=log,
-                    )
-                    if debug and r.get("mus"):
-                        print_mus(vname, r["mus"], file=log)
-                    elif debug and r.get("unsat_core"):
-                        print_unsat_core(
-                            vname, r["unsat_core"],
-                            context="Infeasible", file=log,
-                        )
-                else:
-                    if debug:
-                        print_breakdown(
-                            r["variant"], r["assignments"],
-                            r["min_val"], r["index"], total,
-                            file=log,
-                        )
-                        if r.get("active_constraints"):
-                            print_active_constraints(
-                                vname, r["active_constraints"], file=log,
-                            )
-                        if r.get("unsat_core"):
-                            print_unsat_core(
-                                vname, r["unsat_core"],
-                                context=f"Optimum bound T>={r['min_val']}",
-                                file=log,
-                            )
-                    else:
-                        print_result_summary(
-                            vname, r["assignments"],
-                            r["min_val"], r["index"], total,
-                            file=log,
-                        )
-                    print("-" * 72, file=log)
-        print(f"\nPer-variant log written to: {args.output}")
+    if output_path:
+        _write_detailed_log(results, output_path, total, debug=debug)
 
     # Build the consolidated block size map (None for UNSAT variants).
     block_sizes: dict[str, dict[str, int] | None] = {}
     for r in results:
-        vname = r["variant"].get("variant_name", f"variant_{r['index']}")
+        vname = get_variant_name(r["variant"], r["index"])
         if r["min_val"] is not None:
             block_sizes[vname] = dict(r["assignments"])
         else:
@@ -222,7 +236,12 @@ def main() -> None:
         help="Enable detailed analysis: active constraints at optimum, MUS for UNSAT.",
     )
     args = parser.parse_args()
-    block_sizes = run(args)
+    block_sizes = run(
+        input_path=args.input,
+        njobs=args.njobs,
+        output_path=args.output,
+        debug=args.debug,
+    )
     if not any(v is not None for v in block_sizes.values()):
         sys.exit(2)
 

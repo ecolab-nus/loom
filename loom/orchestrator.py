@@ -26,13 +26,28 @@ Usage:
 Python environment: /opt/miniconda3/envs/loom-dev/bin/python
 Required packages: z3-solver, pybind11 (build-time)
 """
-
 import argparse
 import json
+import logging
 import sys
 from pathlib import Path
+from typing import Any
 
-from loom_utils.timer import PipelineTimer, print_timing_summary
+from loom_utils.timer import pipeline_timer, print_timing_summary
+
+# ---------------------------------------------------------------------------
+# Logging configuration
+# ---------------------------------------------------------------------------
+
+def setup_logging(debug: bool = False) -> None:
+    """Configure structured logging for the Loom pipeline."""
+    level = logging.DEBUG if debug else logging.INFO
+    logging.basicConfig(
+        level=level,
+        format="%(asctime)s [%(levelname)s] %(message)s",
+        datefmt="%H:%M:%S",
+        stream=sys.stdout,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -81,6 +96,157 @@ def _build_parser() -> argparse.ArgumentParser:
 
 
 # ---------------------------------------------------------------------------
+# Pipeline Steps
+# ---------------------------------------------------------------------------
+
+def run_step_0_frontend(ir_dir: Path, debug: bool) -> str:
+    """Step 0: Helion frontend (Python kernel → stage-00 MLIR)."""
+    logging.info("=" * 72)
+    logging.info("STEP 0: HELION FRONTEND (generating stage-00 MLIR)")
+    logging.info("=" * 72)
+
+    with pipeline_timer("Step 0: Helion Frontend"):
+        from kernels.matmul import generate_mlir as frontend_generate_mlir  # noqa: PLC0415
+
+        mlir_text = frontend_generate_mlir()
+        if debug:
+            p00 = ir_dir / "p00_from_helion_frontend.mlir"
+            p00.write_text(mlir_text)
+            logging.info(f"  Frontend MLIR saved to: {p00}")
+
+    logging.info("Helion frontend complete.")
+    return mlir_text
+
+
+def run_step_1_exploration(
+    mlir_text: str,
+    df_mlir: str,
+    hw_compute_dir: str,
+    ir_dir: Path,
+    constraints_dir: Path,
+    debug: bool,
+) -> tuple[str, str]:
+    """Step 1: Exploration pipeline (stages 0→5) via pybind11."""
+    logging.info("")
+    logging.info("=" * 72)
+    logging.info("STEP 1: EXPLORATION PIPELINE (stages 0→5)")
+    logging.info("=" * 72)
+    logging.info(f"  DF MLIR    : {df_mlir}")
+
+    from loom_pipeline import run_exploration  # noqa: PLC0415
+
+    p01 = ir_dir / "p01_explored.mlir"
+    exploration_etg = constraints_dir / "p01_exploration_etg.json"
+
+    if debug:
+        logging.info(f"  Output     : {p01}")
+    logging.info(f"  ETG output : {exploration_etg}")
+
+    with pipeline_timer("Step 1: Exploration Pipeline"):
+        explored_mlir, etg_json_text = run_exploration(
+            input_mlir=mlir_text,
+            df_mlir=df_mlir,
+            hw_compute_dir=hw_compute_dir,
+            produce_etg=True,
+        )
+        exploration_etg.write_text(etg_json_text)
+        if debug:
+            p01.write_text(explored_mlir)
+
+    logging.info("Exploration pipeline complete.")
+    return explored_mlir, etg_json_text
+
+
+def run_step_2_etg_resolution(
+    etg_json_text: str,
+    njobs: int,
+    constraints_dir: Path,
+) -> list[dict[str, Any]]:
+    """Step 2: ETG resolution via MLAR Rust evaluator."""
+    logging.info("")
+    logging.info("=" * 72)
+    logging.info("STEP 2: ETG RESOLUTION (MLAR evaluator)")
+    logging.info("=" * 72)
+
+    from loom_utils.mlar_evaluator import resolve_etg_variants, smart_json_dumps  # noqa: PLC0415
+
+    resolved_etg = constraints_dir / "p02_resolved_etg.json"
+    logging.info(f"  Output : {resolved_etg}")
+
+    with pipeline_timer("Step 2: ETG Resolution"):
+        variants = json.loads(etg_json_text)
+        resolved_variants = resolve_etg_variants(variants, njobs=njobs)
+        resolved_etg.write_text(smart_json_dumps(resolved_variants))
+
+    logging.info(f"ETG resolution complete. {len(resolved_variants)} variant(s) resolved.")
+    return resolved_variants
+
+
+def run_step_3_smt_solve(
+    resolved_etg_path: Path,
+    njobs: int,
+    debug: bool,
+    constraints_dir: Path,
+) -> dict[str, Any]:
+    """Step 3: SMT solver (finds optimal block sizes)."""
+    logging.info("")
+    logging.info("=" * 72)
+    logging.info("STEP 3: SMT SOLVER")
+    logging.info("=" * 72)
+    logging.info(f"  ETG input  : {resolved_etg_path}")
+
+    from smt import smt_run  # noqa: PLC0415
+
+    if smt_run is None:
+        logging.error("SMT solver not available (loom-dataflow not installed in editable mode).")
+        sys.exit(1)
+
+    solver_log = constraints_dir / "smt_solver.log" if debug else None
+
+    with pipeline_timer("Step 3: SMT Solver"):
+        block_sizes = smt_run(
+            input_path=resolved_etg_path,
+            njobs=njobs,
+            output_path=solver_log,
+            debug=debug,
+        )
+
+    feasible_count = sum(1 for v in block_sizes.values() if v is not None)
+    if feasible_count == 0:
+        logging.error("All variants UNSAT. No feasible block sizes. Aborting.")
+        sys.exit(1)
+
+    logging.info(f"Solver found feasible block sizes for {feasible_count} variant(s).")
+    return block_sizes
+
+
+def run_step_4_materialization(
+    explored_mlir: str,
+    block_sizes: dict[str, Any],
+    ir_dir: Path,
+) -> None:
+    """Step 4: Materialization pipeline (stages 5→7) via pybind11."""
+    logging.info("")
+    logging.info("=" * 72)
+    logging.info("STEP 4: MATERIALIZATION PIPELINE (Materialize → OSB)")
+    logging.info("=" * 72)
+
+    from loom_pipeline import run_materialization  # noqa: PLC0415
+
+    p03 = ir_dir / "p03_bufferized.mlir"
+    logging.info(f"  Output : {p03}")
+
+    with pipeline_timer("Step 4: Materialization"):
+        final_mlir = run_materialization(
+            input_mlir=explored_mlir,
+            block_sizes_json=json.dumps(block_sizes),
+        )
+        p03.write_text(final_mlir)
+
+    logging.info(f"Pipeline complete. Final MLIR written to: {p03}")
+
+
+# ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 
@@ -88,15 +254,7 @@ def main() -> None:
     parser = _build_parser()
     args = parser.parse_args()
 
-    # Import the pybind11-based pipeline module and SMT solver.
-    # Deferred here so that --help works without a built _loom_pipeline.so.
-    from loom_pipeline import run_exploration, run_materialization  # noqa: PLC0415
-    from smt import smt_run  # noqa: PLC0415
-    from loom_utils.mlar_evaluator import resolve_etg_variants, smart_json_dumps  # noqa: PLC0415
-
-    if smt_run is None:
-        print("ERROR: SMT solver not available (loom-dataflow not installed in editable mode).")
-        sys.exit(1)
+    setup_logging(args.debug)
 
     output_path = Path(args.output_path)
     ir_dir = output_path / "IRs"
@@ -104,128 +262,32 @@ def main() -> None:
     ir_dir.mkdir(parents=True, exist_ok=True)
     constraints_dir.mkdir(parents=True, exist_ok=True)
 
-    p00 = ir_dir / "p00_from_helion_frontend.mlir"
-    p01 = ir_dir / "p01_explored.mlir"
-    p03 = ir_dir / "p03_bufferized.mlir"
-    exploration_etg = constraints_dir / "p01_exploration_etg.json"
-    resolved_etg = constraints_dir / "p02_resolved_etg.json"
-    solver_log = constraints_dir / "smt_solver.log" if args.debug else None
+    # Step 0: Helion frontend
+    mlir_text = run_step_0_frontend(ir_dir, args.debug)
 
-    try:
-        # ---- Step 0: Helion frontend ----
-        print("=" * 72)
-        print("STEP 0: HELION FRONTEND (generating stage-00 MLIR)")
-        print("=" * 72)
-        print()
+    # Step 1: Exploration pipeline
+    explored_mlir, etg_json_text = run_exploration_step(
+        mlir_text, args.df_mlir, args.hw_compute_dir, ir_dir, constraints_dir, args.debug
+    )
+    del mlir_text  # Free memory
 
-        with PipelineTimer("Step 0: Helion Frontend"):
-            from kernels.matmul import generate_mlir as frontend_generate_mlir  # noqa: PLC0415
+    # Step 2: ETG resolution
+    run_step_2_etg_resolution(etg_json_text, args.njobs, constraints_dir)
+    del etg_json_text  # Free memory
 
-            mlir_text = frontend_generate_mlir()
-            if args.debug:
-                p00.write_text(mlir_text)
-                print(f"  Frontend MLIR saved to: {p00}")
-        print("\nHelion frontend complete.")
+    # Step 3: SMT Solver
+    resolved_etg_path = constraints_dir / "p02_resolved_etg.json"
+    block_sizes = run_step_3_smt_solve(resolved_etg_path, args.njobs, args.debug, constraints_dir)
 
-        # ---- Step 1: Exploration pipeline (stages 0→5) ----
-        print()
-        print("=" * 72)
-        print("STEP 1: EXPLORATION PIPELINE (stages 0→5)")
-        print("=" * 72)
-        print(f"  DF MLIR    : {args.df_mlir}")
-        if args.debug:
-            print(f"  Output     : {p01}")
-        print(f"  ETG output : {exploration_etg}")
-        print()
+    # Step 4: Materialization
+    run_step_4_materialization(explored_mlir, block_sizes, ir_dir)
+    del explored_mlir  # Free memory
 
-        with PipelineTimer("Step 1: Exploration Pipeline"):
-            explored_mlir, etg_json_text = run_exploration(
-                input_mlir=mlir_text,
-                df_mlir=args.df_mlir,
-                hw_compute_dir=args.hw_compute_dir,
-                produce_etg=True,
-            )
-            exploration_etg.write_text(etg_json_text)
-            if args.debug:
-                p01.write_text(explored_mlir)
+    print_timing_summary()
 
-        # Free frontend MLIR — no longer needed.
-        del mlir_text
 
-        print("Exploration pipeline complete.")
-
-        # ---- Step 2: ETG resolution (MLAR evaluator) ----
-        print()
-        print("=" * 72)
-        print("STEP 2: ETG RESOLUTION (MLAR evaluator)")
-        print("=" * 72)
-        print(f"  Input  : {exploration_etg}")
-        print(f"  Output : {resolved_etg}")
-        print()
-
-        with PipelineTimer("Step 2: ETG Resolution"):
-            # TODO: Currently we dump to file and re-read from the Rust evaluator
-            # subprocess.  Future pyo3 integration will allow passing ETG as
-            # in-memory strings, eliminating the intermediate file I/O.
-            variants = json.loads(etg_json_text)
-            resolved_variants = resolve_etg_variants(variants, njobs=args.njobs)
-            resolved_etg.write_text(smart_json_dumps(resolved_variants))
-
-        # Free raw ETG text — no longer needed.
-        del etg_json_text
-
-        print(f"\nETG resolution complete. {len(resolved_variants)} variant(s) resolved.")
-
-        # ---- Step 3: SMT solver ----
-        print()
-        print("=" * 72)
-        print("STEP 3: SMT SOLVER")
-        print("=" * 72)
-        print(f"  ETG input  : {resolved_etg}")
-        print()
-
-        smt_args = argparse.Namespace(
-            input=resolved_etg,
-            njobs=args.njobs,
-            output=solver_log,
-            debug=args.debug,
-        )
-
-        with PipelineTimer("Step 3: SMT Solver"):
-            block_sizes = smt_run(smt_args)
-
-        feasible_count = sum(1 for v in block_sizes.values() if v is not None)
-        if feasible_count == 0:
-            print("\nERROR: All variants UNSAT. No feasible block sizes. Aborting.")
-            sys.exit(1)
-
-        print(f"\nSolver found feasible block sizes for {feasible_count} variant(s).")
-
-        # ---- Step 4: Materialization pipeline (stages 5→7) ----
-        print()
-        print("=" * 72)
-        print("STEP 4: MATERIALIZATION PIPELINE (Materialize → OSB)")
-        print("=" * 72)
-        print(f"  Output : {p03}")
-        print()
-
-        with PipelineTimer("Step 4: Materialization"):
-            final_mlir = run_materialization(
-                input_mlir=explored_mlir,
-                block_sizes_json=json.dumps(block_sizes),
-            )
-
-        # Free explored MLIR — no longer needed.
-        del explored_mlir
-
-        # Always write the final output.
-        p03.write_text(final_mlir)
-
-        print(f"Pipeline complete. Final MLIR written to: {p03}")
-        print_timing_summary()
-
-    except Exception:
-        raise
+# Backward compatibility for Step 1 function name
+run_exploration_step = run_step_1_exploration
 
 
 if __name__ == "__main__":

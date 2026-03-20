@@ -33,3 +33,8 @@ def default_symbol_domains() -> dict[str, list[int]]:
         "N": powers_of_2_range(32, 4096),
         "K": powers_of_2_range(32, 512),
     }
+
+
+def get_variant_name(variant: dict, index: int) -> str:
+    """Return the name of a variant, defaulting to 'variant_{index}'."""
+    return variant.get("variant_name", f"variant_{index}")

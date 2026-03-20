@@ -14,16 +14,23 @@ from ..core.expr_resolver import resolve_expr, resolve_constraint
 
 def eval_expr(expr_dict: dict, concrete_map: dict[str, z3.ArithRef]) -> int:
     """Evaluate a JSON Expr to a concrete integer given a concrete symbol map."""
-    simplified = z3.simplify(resolve_expr(expr_dict, concrete_map))
-    if hasattr(simplified, "as_long"):
+    # Since concrete_map contains only IntVal constants, resolve_expr returns 
+    # an expression where all symbols are replaced by constants. 
+    # simplify() should then reduce it to a single IntNumRef.
+    res = resolve_expr(expr_dict, concrete_map)
+    simplified = z3.simplify(res)
+    
+    if z3.is_int_value(simplified):
         return simplified.as_long()
-    # For expressions that don't fully simplify (e.g. integer division),
-    # use a temporary solver to evaluate.
-    tmp = z3.IntVal(0)
+        
+    # Fallback for extremely complex expressions or non-linear division that 
+    # simplify() might not fully reduce.
     s = z3.Solver()
-    s.add(tmp == simplified)
-    s.check()
-    return s.model().eval(simplified).as_long()
+    s.add(z3.Int("tmp_eval") == simplified)
+    if s.check() == z3.sat:
+        return s.model().eval(simplified).as_long()
+        
+    raise RuntimeError(f"Could not evaluate expression to a constant: {expr_dict}")
 
 
 def print_breakdown(
