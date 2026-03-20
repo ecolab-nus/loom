@@ -132,7 +132,9 @@ def _fill_func_scenarios(schedules, *, evaluator_path=None, evaluator_fn=None):
             if evaluator_fn is not None:
                 result = evaluator_fn(wrapper)
             else:
-                result = evaluate_schedule(wrapper, evaluator_path=evaluator_path)
+                full_result = evaluate_schedule(wrapper, evaluator_path=evaluator_path)
+                # Unwrap the Schedule enum wrapper {"Sequential": {...}}.
+                result = full_result["Sequential"]
             # The evaluator returns {"scenarios": [...]} for the wrapper
             # Sequential.  For a single-Func Sequential those are exactly
             # the Func's own scenarios.
@@ -201,9 +203,13 @@ def resolve_schedule(
             if evaluator_fn is not None:
                 evaluated_fields = evaluator_fn({"Sequential": inner})
             else:
-                evaluated_fields = evaluate_schedule(
+                full_result = evaluate_schedule(
                     {"Sequential": inner}, evaluator_path=evaluator_path
                 )
+                # The binary serializes a Schedule enum, so the output is
+                # wrapped: {"Sequential": {...}}.  Unwrap to get the inner
+                # content so the merge below works correctly.
+                evaluated_fields = full_result["Sequential"]
             filled_inner = {**inner, **evaluated_fields}
             # Also fill individual Func scenarios if the evaluator didn't
             # include them (the Rust binary returns only Sequential-level
