@@ -1,7 +1,7 @@
 #map = affine_map<()[s0] -> (512 ceildiv s0)>
 #map1 = affine_map<(d0, d1) -> (d0, d1)>
 module attributes {loom.block_size_0 = -1 : index, loom.block_size_1 = -1 : index, loom.block_size_2 = -1 : index} {
-  func.func @matmul(%arg0: memref<4096x512xf16>, %arg1: memref<512x4096xf16>, %arg2: memref<4096x4096xf16>) {
+  func.func @_matmul(%arg0: memref<4096x512xf16>, %arg1: memref<512x4096xf16>, %arg2: memref<4096x4096xf16>) {
     %cst = arith.constant 0.000000e+00 : f16
     %0 = "loom.sym"() {symbol_ref = @block_size_0} : () -> index
     %1 = "loom.sym"() {symbol_ref = @block_size_1} : () -> index
