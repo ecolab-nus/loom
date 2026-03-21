@@ -1,8 +1,8 @@
-"""Matmul kernel for the Loom pipeline.
+"""Flash Attention kernel for the Loom pipeline.
 
 Standalone CLI script. Run from the repo root:
 
-    python kernels/matmul.py --config kernels/config.json --njobs 16 --debug
+    python kernels/flash_attention.py --config kernels/config_files/ --njobs 16 --debug
 
 This script inherits the full Loom CLI and pipeline from LoomKernel.
 To write your own kernel, copy this file, replace the kernel body
