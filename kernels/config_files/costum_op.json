@@ -1,5 +1,5 @@
 {
-    "output_path": "test/matmul_2Dmesh",
+    "output_path": "test/custom_op_2Dmesh",
     "df_mlir": "third_party/loom-dataflow/test/Dialect/DataflowDialect/2D_mesh.mlir",
     "hw_compute_dir": "third_party/loom-mlar/tests/2d_mesh/compute"
 }
