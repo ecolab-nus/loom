@@ -42,6 +42,7 @@ def solve_variant(
     total: int,
     domains: dict[str, list[int]],
     debug: bool = False,
+    force_enumerate: bool = False,
 ) -> dict:
     """Solve one variant and return a result dict.
 
@@ -62,7 +63,7 @@ def solve_variant(
     ctx.add_domain_constraints(domains)
 
     t_total = compute_total_time(variant, ctx.symbol_map)
-    result = ctx.find_optimum(t_total, domains)
+    result = ctx.find_optimum(t_total, domains, force_enumerate=force_enumerate)
 
     min_val, assignments = result if result is not None else (None, None)
 
@@ -148,6 +149,7 @@ def run(
     njobs: int = 1,
     output_path: Path | str | None = None,
     debug: bool = False,
+    force_enumerate: bool = False,
 ) -> dict[str, dict[str, int] | None]:
     """Execute the SMT solver on the provided ETG variants."""
     variants = load_variants(input_path)
@@ -161,7 +163,7 @@ def run(
     results: list[dict] = [None] * total
     with ProcessPoolExecutor(max_workers=njobs) as pool:
         futures = {
-            pool.submit(solve_variant, v, i, total, domains, debug): i
+            pool.submit(solve_variant, v, i, total, domains, debug, force_enumerate): i
             for i, v in enumerate(variants)
         }
         completed = 0
@@ -235,12 +237,19 @@ def main() -> None:
         default=False,
         help="Enable detailed analysis: active constraints at optimum, MUS for UNSAT.",
     )
+    parser.add_argument(
+        "--force-enumerate",
+        action="store_true",
+        default=False,
+        help="Skip Z3 binary search and brute-force enumerate all domain combinations.",
+    )
     args = parser.parse_args()
     block_sizes = run(
         input_path=args.input,
         njobs=args.njobs,
         output_path=args.output,
         debug=args.debug,
+        force_enumerate=args.force_enumerate,
     )
     if not any(v is not None for v in block_sizes.values()):
         sys.exit(2)

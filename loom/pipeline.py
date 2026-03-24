@@ -146,6 +146,7 @@ def run_step_3_smt_solve(
     njobs: int,
     debug: bool,
     constraints_dir: Path,
+    force_enumerate: bool = False,
 ) -> dict[str, Any]:
     """Step 3: SMT solver (finds optimal block sizes)."""
     logging.info("")
@@ -168,6 +169,7 @@ def run_step_3_smt_solve(
             njobs=njobs,
             output_path=solver_log,
             debug=debug,
+            force_enumerate=force_enumerate,
         )
 
     feasible_count = sum(1 for v in block_sizes.values() if v is not None)
@@ -264,6 +266,7 @@ def run_pipeline(
     njobs: int = 1,
     debug: bool = False,
     block_sizes: dict[str, int] | None = None,
+    force_enumerate: bool = False,
 ) -> None:
     """Run the full Loom compilation pipeline.
 
@@ -313,7 +316,7 @@ def run_pipeline(
 
         # Step 3: SMT Solver
         resolved_etg_path = constraints_dir / "p02_resolved_etg.json"
-        broadcast = run_step_3_smt_solve(resolved_etg_path, njobs, debug, constraints_dir)
+        broadcast = run_step_3_smt_solve(resolved_etg_path, njobs, debug, constraints_dir, force_enumerate)
 
     del etg_json_text
 

@@ -167,6 +167,12 @@ class LoomKernel:
             default=False,
             help="Enable detailed SMT analysis and write intermediate IRs/logs.",
         )
+        parser.add_argument(
+            "--force-enumerate",
+            action="store_true",
+            default=False,
+            help="Skip Z3 binary search and brute-force enumerate all domain combinations.",
+        )
         return parser
 
     @classmethod
@@ -223,4 +229,5 @@ class LoomKernel:
             njobs=args.njobs,
             debug=args.debug,
             block_sizes=block_sizes,
+            force_enumerate=args.force_enumerate,
         )

@@ -93,6 +93,7 @@ class SolverContext:
         self,
         objective: z3.ArithRef,
         domains: dict[str, list[int]],
+        force_enumerate: bool = False,
     ) -> tuple[int, dict[str, int]] | None:
         """Find the minimum value of *objective* via binary search.
 
@@ -103,10 +104,16 @@ class SolverContext:
         Fallback – if Z3 ever returns UNKNOWN in Phase 1 or Phase 2,
         fall back to full enumeration.
 
+        When *force_enumerate* is True, skip Phases 0-2 entirely and go
+        straight to brute-force enumeration over the domain.
+
         Returns:
             ``(min_value, {sym: value, …})`` on success, or ``None`` when the
             constraint system is infeasible (UNSAT).
         """
+        if force_enumerate:
+            return self._enumerate_all(objective, domains)
+
         # Phase 0: canonicalize constraints + objective
         obj_var = self._simplify(objective)
 
