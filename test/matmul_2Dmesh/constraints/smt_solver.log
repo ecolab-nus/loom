@@ -1919,19 +1919,78 @@ Iteration factors:  seq_iter=1,  temp_iter=[1 × 1]  (product=1)
   __obj_le_131072: (bound constraint)
 
 ------------------------------------------------------------------------
-Variant [31/47]: _matmul__d1i0_d0i1__f10__h_v  UNSAT
+Variant [31/47]: _matmul__d1i0_d0i1__f10__h_v
+Optimal T_total: 131,073 cycles
+  block_size_0 = 512
+  block_size_1 = 512
+  block_size_2 = 512
 
-[MUS] _matmul__d1i0_d0i1__f10__h_v  (9 constraints)
-  [0] positivity(block_size_1): block_size_1 > 0
-  [1] positivity(block_size_2): block_size_2 > 0
-  [2] positivity(block_size_0): block_size_0 > 0
-  [3] hard[0](Ge): 1 <= (512*1)/(1*block_size_2)
-  [4] hard[1](Divisible): 512%block_size_2 == 0
-  [5] hard[2](Ge): 1 <= (4096*1*1)/(1*block_size_0*8)
-  [6] hard[3](Divisible): 4096%((block_size_0*8)/(1*1)) == 0
-  [7] hard[4](Ge): 1 <= (4096*1*1)/(1*block_size_1*8)
-  [8] hard[5](Divisible): 4096%((block_size_1*8)/(1*1)) == 0
+Iteration factors:  seq_iter=1,  temp_iter=[1 × 1]  (product=1)
 
+  [ComputeScope]
+    Stage 2:
+      scenario[0]     131,073 cycles
+  → scope total        131,073 cycles
+
+  [MemoryScope]
+    Stage 2:
+      scenario[0]           2 cycles
+  → scope total              2 cycles
+
+  T_comp  =    131,073 cycles
+  T_mem   =          2 cycles
+  T_stage = max(T_comp, T_mem) = 131,073 cycles
+  T_total = 131,073 × 1 × 1 = 131,073 cycles
+
+[Active Constraints] _matmul__d1i0_d0i1__f10__h_v
+  hard[0]: Ge: 1 >= 1 (tight, slack=0)
+    JSON: {'Ge': [{'Div': [{'Const': 512}, {'Sym': 'block_size_2'}]}, {'Const': 1}]}
+  hard[2]: Ge: 1 >= 1 (tight, slack=0)
+    JSON: {'Ge': [{'Div': [{'Const': 4096}, {'Mul': [{'Sym': 'block_size_0'}, {'Const': 8}]}]}, {'Const': 1}]}
+  hard[4]: Ge: 1 >= 1 (tight, slack=0)
+    JSON: {'Ge': [{'Div': [{'Const': 4096}, {'Mul': [{'Sym': 'block_size_1'}, {'Const': 8}]}]}, {'Const': 1}]}
+
+[UNSAT Core] _matmul__d1i0_d0i1__f10__h_v (Optimum bound T>=131073)
+  sc_0_16: Or(Not(And(32 <= block_size_0,
+           32 <= block_size_1,
+           32 <= block_size_2,
+           8192 <= block_size_0*block_size_1)),
+   k!7 == 1 + (block_size_0*block_size_1*block_size_2)/1024)
+  sc_0_1: Not(block_size_2 <= 0)
+  sc_0_4: 512%block_size_2 == 0
+  sc_0_11: Or(block_size_0 == 0, k!4 == 512/block_size_0)
+  sc_0_9: __obj == (512/block_size_2)*k!4*k!5*k!8
+  sc_0_8: 4096%(8*block_size_1) == 0
+  sc_0_6: 4096%(8*block_size_0) == 0
+  sc_0_7: 1 <= k!5
+  sc_0_5: 1 <= k!4
+  sc_0_3: 1 <= 512/block_size_2
+  sc_0_17: Or(And(32 <= block_size_0,
+       32 <= block_size_1,
+       32 <= block_size_2,
+       8192 <= block_size_0*block_size_1),
+   k!7 == k!6)
+  sc_0_14: Or(Not(And(32 <= block_size_0,
+           32 <= block_size_1,
+           32 <= block_size_2,
+           8192 >= block_size_0*block_size_1)),
+   k!6 ==
+   (1024*block_size_0*block_size_1 +
+    8192*block_size_0*block_size_1*block_size_2)/
+   (1024*block_size_0*block_size_1))
+  sc_0_15: Or(And(32 <= block_size_0,
+       32 <= block_size_1,
+       32 <= block_size_2,
+       8192 >= block_size_0*block_size_1),
+   k!6 == 2147483648)
+  sc_0_19: Or(k!7 >= 2, k!8 == 2)
+  sc_0_2: Not(block_size_0 <= 0)
+  sc_0_18: Or(Not(k!7 >= 2), k!8 == k!7)
+  __obj_le_131072: (bound constraint)
+  sc_0_13: Or(block_size_1 == 0, k!5 == 512/block_size_1)
+  sc_0_0: Not(block_size_1 <= 0)
+
+------------------------------------------------------------------------
 Variant [32/47]: _matmul__d0i1_d1i1__f01__d_d
 Optimal T_total: 131,073 cycles
   block_size_0 = 4096
@@ -1964,76 +2023,6 @@ Iteration factors:  seq_iter=1,  temp_iter=[1 × 1]  (product=1)
     JSON: {'Ge': [{'Div': [{'Const': 4096}, {'Sym': 'block_size_0'}]}, {'Const': 1}]}
 
 [UNSAT Core] _matmul__d0i1_d1i1__f01__d_d (Optimum bound T>=131073)
-  sc_0_15: Or(And(32 <= block_size_0,
-       32 <= block_size_1,
-       32 <= block_size_2,
-       8192 <= block_size_0*block_size_1),
-   k!11 == k!10)
-  sc_0_2: Not(block_size_0 <= 0)
-  __obj_le_131072: (bound constraint)
-  sc_0_3: 1 <= 512/block_size_2
-  sc_0_7: 1 <= 4096/block_size_0
-  sc_0_13: Or(And(32 <= block_size_0,
-       32 <= block_size_1,
-       32 <= block_size_2,
-       8192 >= block_size_0*block_size_1),
-   k!10 == 2147483648)
-  sc_0_14: Or(Not(And(32 <= block_size_0,
-           32 <= block_size_1,
-           32 <= block_size_2,
-           8192 <= block_size_0*block_size_1)),
-   k!11 == 1 + (block_size_0*block_size_1*block_size_2)/1024)
-  sc_0_9: __obj == (512/block_size_2)*(4096/block_size_0)*k!9*k!12
-  sc_0_8: 4096%block_size_0 == 0
-  sc_0_11: Or(block_size_1 == 0, k!9 == 64/block_size_1)
-  sc_0_6: 4096%(64*block_size_1) == 0
-  sc_0_4: 512%block_size_2 == 0
-  sc_0_5: 1 <= k!9
-  sc_0_12: Or(Not(And(32 <= block_size_0,
-           32 <= block_size_1,
-           32 <= block_size_2,
-           8192 >= block_size_0*block_size_1)),
-   k!10 ==
-   (1024*block_size_0*block_size_1 +
-    8192*block_size_0*block_size_1*block_size_2)/
-   (1024*block_size_0*block_size_1))
-  sc_0_0: Not(block_size_1 <= 0)
-  sc_0_1: Not(block_size_2 <= 0)
-  sc_0_16: Or(Not(k!11 >= 4), k!12 == k!11)
-
-------------------------------------------------------------------------
-Variant [33/47]: _matmul__d0i1_d1i1__f01__a_d
-Optimal T_total: 131,073 cycles
-  block_size_0 = 4096
-  block_size_1 = 64
-  block_size_2 = 512
-
-Iteration factors:  seq_iter=1,  temp_iter=[1 × 1]  (product=1)
-
-  [ComputeScope]
-    Stage 2:
-      scenario[0]     131,073 cycles
-  → scope total        131,073 cycles
-
-  [MemoryScope]
-    Stage 2:
-      scenario[0]           4 cycles
-  → scope total              4 cycles
-
-  T_comp  =    131,073 cycles
-  T_mem   =          4 cycles
-  T_stage = max(T_comp, T_mem) = 131,073 cycles
-  T_total = 131,073 × 1 × 1 = 131,073 cycles
-
-[Active Constraints] _matmul__d0i1_d1i1__f01__a_d
-  hard[0]: Ge: 1 >= 1 (tight, slack=0)
-    JSON: {'Ge': [{'Div': [{'Const': 512}, {'Sym': 'block_size_2'}]}, {'Const': 1}]}
-  hard[2]: Ge: 1 >= 1 (tight, slack=0)
-    JSON: {'Ge': [{'Div': [{'Const': 4096}, {'Mul': [{'Sym': 'block_size_1'}, {'Const': 64}]}]}, {'Const': 1}]}
-  hard[4]: Ge: 1 >= 1 (tight, slack=0)
-    JSON: {'Ge': [{'Div': [{'Const': 4096}, {'Sym': 'block_size_0'}]}, {'Const': 1}]}
-
-[UNSAT Core] _matmul__d0i1_d1i1__f01__a_d (Optimum bound T>=131073)
   sc_0_0: Not(block_size_1 <= 0)
   sc_0_5: 1 <= k!54
   sc_0_15: Or(And(32 <= block_size_0,
@@ -2072,6 +2061,76 @@ Iteration factors:  seq_iter=1,  temp_iter=[1 × 1]  (product=1)
   sc_0_1: Not(block_size_2 <= 0)
 
 ------------------------------------------------------------------------
+Variant [33/47]: _matmul__d0i1_d1i1__f01__a_d
+Optimal T_total: 131,073 cycles
+  block_size_0 = 4096
+  block_size_1 = 64
+  block_size_2 = 512
+
+Iteration factors:  seq_iter=1,  temp_iter=[1 × 1]  (product=1)
+
+  [ComputeScope]
+    Stage 2:
+      scenario[0]     131,073 cycles
+  → scope total        131,073 cycles
+
+  [MemoryScope]
+    Stage 2:
+      scenario[0]           4 cycles
+  → scope total              4 cycles
+
+  T_comp  =    131,073 cycles
+  T_mem   =          4 cycles
+  T_stage = max(T_comp, T_mem) = 131,073 cycles
+  T_total = 131,073 × 1 × 1 = 131,073 cycles
+
+[Active Constraints] _matmul__d0i1_d1i1__f01__a_d
+  hard[0]: Ge: 1 >= 1 (tight, slack=0)
+    JSON: {'Ge': [{'Div': [{'Const': 512}, {'Sym': 'block_size_2'}]}, {'Const': 1}]}
+  hard[2]: Ge: 1 >= 1 (tight, slack=0)
+    JSON: {'Ge': [{'Div': [{'Const': 4096}, {'Mul': [{'Sym': 'block_size_1'}, {'Const': 64}]}]}, {'Const': 1}]}
+  hard[4]: Ge: 1 >= 1 (tight, slack=0)
+    JSON: {'Ge': [{'Div': [{'Const': 4096}, {'Sym': 'block_size_0'}]}, {'Const': 1}]}
+
+[UNSAT Core] _matmul__d0i1_d1i1__f01__a_d (Optimum bound T>=131073)
+  sc_0_15: Or(And(32 <= block_size_0,
+       32 <= block_size_1,
+       32 <= block_size_2,
+       8192 <= block_size_0*block_size_1),
+   k!11 == k!10)
+  sc_0_2: Not(block_size_0 <= 0)
+  __obj_le_131072: (bound constraint)
+  sc_0_3: 1 <= 512/block_size_2
+  sc_0_7: 1 <= 4096/block_size_0
+  sc_0_13: Or(And(32 <= block_size_0,
+       32 <= block_size_1,
+       32 <= block_size_2,
+       8192 >= block_size_0*block_size_1),
+   k!10 == 2147483648)
+  sc_0_14: Or(Not(And(32 <= block_size_0,
+           32 <= block_size_1,
+           32 <= block_size_2,
+           8192 <= block_size_0*block_size_1)),
+   k!11 == 1 + (block_size_0*block_size_1*block_size_2)/1024)
+  sc_0_9: __obj == (512/block_size_2)*(4096/block_size_0)*k!9*k!12
+  sc_0_8: 4096%block_size_0 == 0
+  sc_0_11: Or(block_size_1 == 0, k!9 == 64/block_size_1)
+  sc_0_6: 4096%(64*block_size_1) == 0
+  sc_0_4: 512%block_size_2 == 0
+  sc_0_5: 1 <= k!9
+  sc_0_12: Or(Not(And(32 <= block_size_0,
+           32 <= block_size_1,
+           32 <= block_size_2,
+           8192 >= block_size_0*block_size_1)),
+   k!10 ==
+   (1024*block_size_0*block_size_1 +
+    8192*block_size_0*block_size_1*block_size_2)/
+   (1024*block_size_0*block_size_1))
+  sc_0_0: Not(block_size_1 <= 0)
+  sc_0_1: Not(block_size_2 <= 0)
+  sc_0_16: Or(Not(k!11 >= 4), k!12 == k!11)
+
+------------------------------------------------------------------------
 Variant [34/47]: _matmul__d0i1_d1i1__f01__h_d
 Optimal T_total: 131,073 cycles
   block_size_0 = 4096
@@ -2104,77 +2163,6 @@ Iteration factors:  seq_iter=1,  temp_iter=[1 × 1]  (product=1)
     JSON: {'Ge': [{'Div': [{'Const': 4096}, {'Sym': 'block_size_0'}]}, {'Const': 1}]}
 
 [UNSAT Core] _matmul__d0i1_d1i1__f01__h_d (Optimum bound T>=131073)
-  sc_0_0: Not(block_size_1 <= 0)
-  sc_0_4: 512%block_size_2 == 0
-  sc_0_7: 1 <= 4096/block_size_0
-  sc_0_5: 1 <= k!54
-  sc_0_16: Or(Not(k!56 >= 3), k!57 == k!56)
-  sc_0_17: Or(k!56 >= 3, k!57 == 3)
-  sc_0_3: 1 <= 512/block_size_2
-  sc_0_6: 4096%(64*block_size_1) == 0
-  sc_0_12: Or(Not(And(32 <= block_size_0,
-           32 <= block_size_1,
-           32 <= block_size_2,
-           8192 >= block_size_0*block_size_1)),
-   k!55 ==
-   (1024*block_size_0*block_size_1 +
-    8192*block_size_0*block_size_1*block_size_2)/
-   (1024*block_size_0*block_size_1))
-  sc_0_2: Not(block_size_0 <= 0)
-  sc_0_9: __obj == (512/block_size_2)*(4096/block_size_0)*k!54*k!57
-  sc_0_8: 4096%block_size_0 == 0
-  sc_0_11: Or(block_size_1 == 0, k!54 == 64/block_size_1)
-  sc_0_14: Or(Not(And(32 <= block_size_0,
-           32 <= block_size_1,
-           32 <= block_size_2,
-           8192 <= block_size_0*block_size_1)),
-   k!56 == 1 + (block_size_0*block_size_1*block_size_2)/1024)
-  sc_0_15: Or(And(32 <= block_size_0,
-       32 <= block_size_1,
-       32 <= block_size_2,
-       8192 <= block_size_0*block_size_1),
-   k!56 == k!55)
-  sc_0_13: Or(And(32 <= block_size_0,
-       32 <= block_size_1,
-       32 <= block_size_2,
-       8192 >= block_size_0*block_size_1),
-   k!55 == 2147483648)
-  __obj_le_131072: (bound constraint)
-  sc_0_1: Not(block_size_2 <= 0)
-
-------------------------------------------------------------------------
-Variant [35/47]: _matmul__d0i1_d1i1__f01__v_d
-Optimal T_total: 131,073 cycles
-  block_size_0 = 4096
-  block_size_1 = 64
-  block_size_2 = 512
-
-Iteration factors:  seq_iter=1,  temp_iter=[1 × 1]  (product=1)
-
-  [ComputeScope]
-    Stage 2:
-      scenario[0]     131,073 cycles
-  → scope total        131,073 cycles
-
-  [MemoryScope]
-    Stage 2:
-      scenario[0]           3 cycles
-  → scope total              3 cycles
-
-  T_comp  =    131,073 cycles
-  T_mem   =          3 cycles
-  T_stage = max(T_comp, T_mem) = 131,073 cycles
-  T_total = 131,073 × 1 × 1 = 131,073 cycles
-
-[Active Constraints] _matmul__d0i1_d1i1__f01__v_d
-  hard[0]: Ge: 1 >= 1 (tight, slack=0)
-    JSON: {'Ge': [{'Div': [{'Const': 512}, {'Sym': 'block_size_2'}]}, {'Const': 1}]}
-  hard[2]: Ge: 1 >= 1 (tight, slack=0)
-    JSON: {'Ge': [{'Div': [{'Const': 4096}, {'Mul': [{'Sym': 'block_size_1'}, {'Const': 64}]}]}, {'Const': 1}]}
-  hard[4]: Ge: 1 >= 1 (tight, slack=0)
-    JSON: {'Ge': [{'Div': [{'Const': 4096}, {'Sym': 'block_size_0'}]}, {'Const': 1}]}
-
-[UNSAT Core] _matmul__d0i1_d1i1__f01__v_d (Optimum bound T>=131073)
   sc_0_9: __obj == (512/block_size_2)*(4096/block_size_0)*k!58*k!61
   sc_0_11: Or(block_size_1 == 0, k!58 == 64/block_size_1)
   sc_0_6: 4096%(64*block_size_1) == 0
@@ -2214,6 +2202,19 @@ Iteration factors:  seq_iter=1,  temp_iter=[1 × 1]  (product=1)
    k!60 == 1 + (block_size_0*block_size_1*block_size_2)/1024)
 
 ------------------------------------------------------------------------
+Variant [35/47]: _matmul__d0i1_d1i1__f01__v_d  UNSAT
+
+[MUS] _matmul__d0i1_d1i1__f01__v_d  (9 constraints)
+  [0] positivity(block_size_1): block_size_1 > 0
+  [1] positivity(block_size_2): block_size_2 > 0
+  [2] positivity(block_size_0): block_size_0 > 0
+  [3] hard[0](Ge): 1 <= (512*1)/(1*block_size_2)
+  [4] hard[1](Divisible): 512%block_size_2 == 0
+  [5] hard[2](Ge): 1 <= (4096*1*1)/(1*block_size_1*64)
+  [6] hard[3](Divisible): 4096%((block_size_1*64)/(1*1)) == 0
+  [7] hard[4](Ge): 1 <= (4096*1)/(1*block_size_0)
+  [8] hard[5](Divisible): 4096%block_size_0 == 0
+
 Variant [36/47]: _matmul__d0i1_d1i1__f10__d_d
 Optimal T_total: 131,073 cycles
   block_size_0 = 4096
@@ -2316,57 +2317,115 @@ Iteration factors:  seq_iter=1,  temp_iter=[1 × 1]  (product=1)
     JSON: {'Ge': [{'Div': [{'Const': 4096}, {'Mul': [{'Sym': 'block_size_1'}, {'Const': 64}]}]}, {'Const': 1}]}
 
 [UNSAT Core] _matmul__d0i1_d1i1__f10__a_d (Optimum bound T>=131073)
-  sc_0_2: Not(block_size_0 <= 0)
-  sc_0_4: 512%block_size_2 == 0
-  sc_0_15: Or(And(32 <= block_size_0,
-       32 <= block_size_1,
-       32 <= block_size_2,
-       8192 <= block_size_0*block_size_1),
-   k!15 == k!14)
-  sc_0_3: 1 <= 512/block_size_2
-  sc_0_8: 4096%(64*block_size_1) == 0
-  sc_0_6: 4096%block_size_0 == 0
-  sc_0_9: __obj == (512/block_size_2)*(4096/block_size_0)*k!13*k!16
-  sc_0_5: 1 <= 4096/block_size_0
-  sc_0_7: 1 <= k!13
-  sc_0_11: Or(block_size_1 == 0, k!13 == 64/block_size_1)
-  sc_0_13: Or(And(32 <= block_size_0,
-       32 <= block_size_1,
-       32 <= block_size_2,
-       8192 >= block_size_0*block_size_1),
-   k!14 == 2147483648)
-  sc_0_1: Not(block_size_2 <= 0)
-  sc_0_16: Or(Not(k!15 >= 4), k!16 == k!15)
-  sc_0_12: Or(Not(And(32 <= block_size_0,
-           32 <= block_size_1,
-           32 <= block_size_2,
-           8192 >= block_size_0*block_size_1)),
-   k!14 ==
-   (1024*block_size_0*block_size_1 +
-    8192*block_size_0*block_size_1*block_size_2)/
-   (1024*block_size_0*block_size_1))
   sc_0_14: Or(Not(And(32 <= block_size_0,
            32 <= block_size_1,
            32 <= block_size_2,
            8192 <= block_size_0*block_size_1)),
-   k!15 == 1 + (block_size_0*block_size_1*block_size_2)/1024)
+   k!56 == 1 + (block_size_0*block_size_1*block_size_2)/1024)
+  sc_0_2: Not(block_size_0 <= 0)
+  sc_0_3: 1 <= 512/block_size_2
+  sc_0_6: 4096%block_size_0 == 0
+  sc_0_5: 1 <= 4096/block_size_0
+  sc_0_4: 512%block_size_2 == 0
+  sc_0_11: Or(block_size_1 == 0, k!54 == 64/block_size_1)
+  sc_0_12: Or(Not(And(32 <= block_size_0,
+           32 <= block_size_1,
+           32 <= block_size_2,
+           8192 >= block_size_0*block_size_1)),
+   k!55 ==
+   (1024*block_size_0*block_size_1 +
+    8192*block_size_0*block_size_1*block_size_2)/
+   (1024*block_size_0*block_size_1))
+  sc_0_13: Or(And(32 <= block_size_0,
+       32 <= block_size_1,
+       32 <= block_size_2,
+       8192 >= block_size_0*block_size_1),
+   k!55 == 2147483648)
+  sc_0_9: __obj == (512/block_size_2)*(4096/block_size_0)*k!54*k!57
+  sc_0_1: Not(block_size_2 <= 0)
+  sc_0_16: Or(Not(k!56 >= 4), k!57 == k!56)
+  sc_0_7: 1 <= k!54
+  sc_0_15: Or(And(32 <= block_size_0,
+       32 <= block_size_1,
+       32 <= block_size_2,
+       8192 <= block_size_0*block_size_1),
+   k!56 == k!55)
+  sc_0_8: 4096%(64*block_size_1) == 0
   sc_0_0: Not(block_size_1 <= 0)
   __obj_le_131072: (bound constraint)
 
 ------------------------------------------------------------------------
-Variant [38/47]: _matmul__d0i1_d1i1__f10__h_d  UNSAT
+Variant [38/47]: _matmul__d0i1_d1i1__f10__h_d
+Optimal T_total: 131,073 cycles
+  block_size_0 = 4096
+  block_size_1 = 64
+  block_size_2 = 512
 
-[MUS] _matmul__d0i1_d1i1__f10__h_d  (9 constraints)
-  [0] positivity(block_size_1): block_size_1 > 0
-  [1] positivity(block_size_2): block_size_2 > 0
-  [2] positivity(block_size_0): block_size_0 > 0
-  [3] hard[0](Ge): 1 <= (512*1)/(1*block_size_2)
-  [4] hard[1](Divisible): 512%block_size_2 == 0
-  [5] hard[2](Ge): 1 <= (4096*1)/(1*block_size_0)
-  [6] hard[3](Divisible): 4096%block_size_0 == 0
-  [7] hard[4](Ge): 1 <= (4096*1*1)/(1*block_size_1*64)
-  [8] hard[5](Divisible): 4096%((block_size_1*64)/(1*1)) == 0
+Iteration factors:  seq_iter=1,  temp_iter=[1 × 1]  (product=1)
 
+  [ComputeScope]
+    Stage 2:
+      scenario[0]     131,073 cycles
+  → scope total        131,073 cycles
+
+  [MemoryScope]
+    Stage 2:
+      scenario[0]           3 cycles
+  → scope total              3 cycles
+
+  T_comp  =    131,073 cycles
+  T_mem   =          3 cycles
+  T_stage = max(T_comp, T_mem) = 131,073 cycles
+  T_total = 131,073 × 1 × 1 = 131,073 cycles
+
+[Active Constraints] _matmul__d0i1_d1i1__f10__h_d
+  hard[0]: Ge: 1 >= 1 (tight, slack=0)
+    JSON: {'Ge': [{'Div': [{'Const': 512}, {'Sym': 'block_size_2'}]}, {'Const': 1}]}
+  hard[2]: Ge: 1 >= 1 (tight, slack=0)
+    JSON: {'Ge': [{'Div': [{'Const': 4096}, {'Sym': 'block_size_0'}]}, {'Const': 1}]}
+  hard[4]: Ge: 1 >= 1 (tight, slack=0)
+    JSON: {'Ge': [{'Div': [{'Const': 4096}, {'Mul': [{'Sym': 'block_size_1'}, {'Const': 64}]}]}, {'Const': 1}]}
+
+[UNSAT Core] _matmul__d0i1_d1i1__f10__h_d (Optimum bound T>=131073)
+  sc_0_13: Or(And(32 <= block_size_0,
+       32 <= block_size_1,
+       32 <= block_size_2,
+       8192 >= block_size_0*block_size_1),
+   k!63 == 2147483648)
+  sc_0_8: 4096%(64*block_size_1) == 0
+  sc_0_7: 1 <= k!62
+  sc_0_9: __obj == (512/block_size_2)*(4096/block_size_0)*k!62*k!65
+  sc_0_6: 4096%block_size_0 == 0
+  sc_0_3: 1 <= 512/block_size_2
+  sc_0_2: Not(block_size_0 <= 0)
+  sc_0_17: Or(k!64 >= 3, k!65 == 3)
+  sc_0_15: Or(And(32 <= block_size_0,
+       32 <= block_size_1,
+       32 <= block_size_2,
+       8192 <= block_size_0*block_size_1),
+   k!64 == k!63)
+  sc_0_14: Or(Not(And(32 <= block_size_0,
+           32 <= block_size_1,
+           32 <= block_size_2,
+           8192 <= block_size_0*block_size_1)),
+   k!64 == 1 + (block_size_0*block_size_1*block_size_2)/1024)
+  sc_0_11: Or(block_size_1 == 0, k!62 == 64/block_size_1)
+  sc_0_12: Or(Not(And(32 <= block_size_0,
+           32 <= block_size_1,
+           32 <= block_size_2,
+           8192 >= block_size_0*block_size_1)),
+   k!63 ==
+   (1024*block_size_0*block_size_1 +
+    8192*block_size_0*block_size_1*block_size_2)/
+   (1024*block_size_0*block_size_1))
+  sc_0_16: Or(Not(k!64 >= 3), k!65 == k!64)
+  sc_0_0: Not(block_size_1 <= 0)
+  __obj_le_131072: (bound constraint)
+  sc_0_1: Not(block_size_2 <= 0)
+  sc_0_5: 1 <= 4096/block_size_0
+  sc_0_4: 512%block_size_2 == 0
+
+------------------------------------------------------------------------
 Variant [39/47]: _matmul__d0i1_d1i1__f10__v_d
 Optimal T_total: 131,073 cycles
   block_size_0 = 4096
@@ -2399,42 +2458,42 @@ Iteration factors:  seq_iter=1,  temp_iter=[1 × 1]  (product=1)
     JSON: {'Ge': [{'Div': [{'Const': 4096}, {'Mul': [{'Sym': 'block_size_1'}, {'Const': 64}]}]}, {'Const': 1}]}
 
 [UNSAT Core] _matmul__d0i1_d1i1__f10__v_d (Optimum bound T>=131073)
+  sc_0_16: Or(Not(k!64 >= 3), k!65 == k!64)
+  sc_0_2: Not(block_size_0 <= 0)
+  sc_0_0: Not(block_size_1 <= 0)
   sc_0_14: Or(Not(And(32 <= block_size_0,
            32 <= block_size_1,
            32 <= block_size_2,
            8192 <= block_size_0*block_size_1)),
-   k!60 == 1 + (block_size_0*block_size_1*block_size_2)/1024)
-  sc_0_8: 4096%(64*block_size_1) == 0
-  sc_0_4: 512%block_size_2 == 0
-  sc_0_9: __obj == (512/block_size_2)*(4096/block_size_0)*k!58*k!61
-  sc_0_11: Or(block_size_1 == 0, k!58 == 64/block_size_1)
-  sc_0_12: Or(Not(And(32 <= block_size_0,
-           32 <= block_size_1,
-           32 <= block_size_2,
-           8192 >= block_size_0*block_size_1)),
-   k!59 ==
-   (1024*block_size_0*block_size_1 +
-    8192*block_size_0*block_size_1*block_size_2)/
-   (1024*block_size_0*block_size_1))
-  sc_0_16: Or(Not(k!60 >= 3), k!61 == k!60)
+   k!64 == 1 + (block_size_0*block_size_1*block_size_2)/1024)
   sc_0_15: Or(And(32 <= block_size_0,
        32 <= block_size_1,
        32 <= block_size_2,
        8192 <= block_size_0*block_size_1),
-   k!60 == k!59)
+   k!64 == k!63)
+  sc_0_7: 1 <= k!62
+  sc_0_1: Not(block_size_2 <= 0)
+  sc_0_12: Or(Not(And(32 <= block_size_0,
+           32 <= block_size_1,
+           32 <= block_size_2,
+           8192 >= block_size_0*block_size_1)),
+   k!63 ==
+   (1024*block_size_0*block_size_1 +
+    8192*block_size_0*block_size_1*block_size_2)/
+   (1024*block_size_0*block_size_1))
+  sc_0_5: 1 <= 4096/block_size_0
   sc_0_13: Or(And(32 <= block_size_0,
        32 <= block_size_1,
        32 <= block_size_2,
        8192 >= block_size_0*block_size_1),
-   k!59 == 2147483648)
-  sc_0_3: 1 <= 512/block_size_2
-  sc_0_5: 1 <= 4096/block_size_0
-  sc_0_2: Not(block_size_0 <= 0)
-  sc_0_1: Not(block_size_2 <= 0)
-  sc_0_17: Or(k!60 >= 3, k!61 == 3)
+   k!63 == 2147483648)
+  sc_0_9: __obj == (512/block_size_2)*(4096/block_size_0)*k!62*k!65
+  sc_0_4: 512%block_size_2 == 0
+  sc_0_8: 4096%(64*block_size_1) == 0
   sc_0_6: 4096%block_size_0 == 0
-  sc_0_7: 1 <= k!58
-  sc_0_0: Not(block_size_1 <= 0)
+  sc_0_11: Or(block_size_1 == 0, k!62 == 64/block_size_1)
+  sc_0_3: 1 <= 512/block_size_2
+  sc_0_17: Or(k!64 >= 3, k!65 == 3)
   __obj_le_131072: (bound constraint)
 
 ------------------------------------------------------------------------
@@ -2476,6 +2535,76 @@ Iteration factors:  seq_iter=1,  temp_iter=[1 × 1]  (product=1)
        32 <= block_size_2,
        8192 <= block_size_0*block_size_1),
    k!11 == k!10)
+  __obj_le_131072: (bound constraint)
+  sc_0_2: Not(block_size_0 <= 0)
+  sc_0_14: Or(Not(And(32 <= block_size_0,
+           32 <= block_size_1,
+           32 <= block_size_2,
+           8192 <= block_size_0*block_size_1)),
+   k!11 == 1 + (block_size_0*block_size_1*block_size_2)/1024)
+  sc_0_1: Not(block_size_2 <= 0)
+  sc_0_12: Or(Not(And(32 <= block_size_0,
+           32 <= block_size_1,
+           32 <= block_size_2,
+           8192 >= block_size_0*block_size_1)),
+   k!10 ==
+   (1024*block_size_0*block_size_1 +
+    8192*block_size_0*block_size_1*block_size_2)/
+   (1024*block_size_0*block_size_1))
+  sc_0_13: Or(And(32 <= block_size_0,
+       32 <= block_size_1,
+       32 <= block_size_2,
+       8192 >= block_size_0*block_size_1),
+   k!10 == 2147483648)
+  sc_0_3: 1 <= 512/block_size_2
+  sc_0_5: 1 <= k!9
+  sc_0_7: 1 <= 4096/block_size_0
+  sc_0_8: 4096%block_size_0 == 0
+  sc_0_6: 4096%(64*block_size_1) == 0
+  sc_0_4: 512%block_size_2 == 0
+  sc_0_11: Or(block_size_1 == 0, k!9 == 64/block_size_1)
+  sc_0_0: Not(block_size_1 <= 0)
+  sc_0_16: Or(Not(k!11 >= 4), k!12 == k!11)
+
+------------------------------------------------------------------------
+Variant [41/47]: _matmul__d1i1_d0i1__f01__a_d
+Optimal T_total: 131,073 cycles
+  block_size_0 = 4096
+  block_size_1 = 64
+  block_size_2 = 512
+
+Iteration factors:  seq_iter=1,  temp_iter=[1 × 1]  (product=1)
+
+  [ComputeScope]
+    Stage 2:
+      scenario[0]     131,073 cycles
+  → scope total        131,073 cycles
+
+  [MemoryScope]
+    Stage 2:
+      scenario[0]           4 cycles
+  → scope total              4 cycles
+
+  T_comp  =    131,073 cycles
+  T_mem   =          4 cycles
+  T_stage = max(T_comp, T_mem) = 131,073 cycles
+  T_total = 131,073 × 1 × 1 = 131,073 cycles
+
+[Active Constraints] _matmul__d1i1_d0i1__f01__a_d
+  hard[0]: Ge: 1 >= 1 (tight, slack=0)
+    JSON: {'Ge': [{'Div': [{'Const': 512}, {'Sym': 'block_size_2'}]}, {'Const': 1}]}
+  hard[2]: Ge: 1 >= 1 (tight, slack=0)
+    JSON: {'Ge': [{'Div': [{'Const': 4096}, {'Mul': [{'Sym': 'block_size_1'}, {'Const': 64}]}]}, {'Const': 1}]}
+  hard[4]: Ge: 1 >= 1 (tight, slack=0)
+    JSON: {'Ge': [{'Div': [{'Const': 4096}, {'Sym': 'block_size_0'}]}, {'Const': 1}]}
+
+[UNSAT Core] _matmul__d1i1_d0i1__f01__a_d (Optimum bound T>=131073)
+  sc_0_9: __obj == (512/block_size_2)*(4096/block_size_0)*k!9*k!12
+  sc_0_15: Or(And(32 <= block_size_0,
+       32 <= block_size_1,
+       32 <= block_size_2,
+       8192 <= block_size_0*block_size_1),
+   k!11 == k!10)
   sc_0_2: Not(block_size_0 <= 0)
   sc_0_7: 1 <= 4096/block_size_0
   sc_0_13: Or(And(32 <= block_size_0,
@@ -2509,19 +2638,6 @@ Iteration factors:  seq_iter=1,  temp_iter=[1 × 1]  (product=1)
   sc_0_16: Or(Not(k!11 >= 4), k!12 == k!11)
 
 ------------------------------------------------------------------------
-Variant [41/47]: _matmul__d1i1_d0i1__f01__a_d  UNSAT
-
-[MUS] _matmul__d1i1_d0i1__f01__a_d  (9 constraints)
-  [0] positivity(block_size_1): block_size_1 > 0
-  [1] positivity(block_size_2): block_size_2 > 0
-  [2] positivity(block_size_0): block_size_0 > 0
-  [3] hard[0](Ge): 1 <= (512*1)/(1*block_size_2)
-  [4] hard[1](Divisible): 512%block_size_2 == 0
-  [5] hard[2](Ge): 1 <= (4096*1*1)/(1*block_size_1*64)
-  [6] hard[3](Divisible): 4096%((block_size_1*64)/(1*1)) == 0
-  [7] hard[4](Ge): 1 <= (4096*1)/(1*block_size_0)
-  [8] hard[5](Divisible): 4096%block_size_0 == 0
-
 Variant [42/47]: _matmul__d1i1_d0i1__f01__h_d
 Optimal T_total: 131,073 cycles
   block_size_0 = 4096
@@ -2554,43 +2670,43 @@ Iteration factors:  seq_iter=1,  temp_iter=[1 × 1]  (product=1)
     JSON: {'Ge': [{'Div': [{'Const': 4096}, {'Sym': 'block_size_0'}]}, {'Const': 1}]}
 
 [UNSAT Core] _matmul__d1i1_d0i1__f01__h_d (Optimum bound T>=131073)
-  sc_0_9: __obj == (512/block_size_2)*(4096/block_size_0)*k!9*k!12
-  sc_0_15: Or(And(32 <= block_size_0,
-       32 <= block_size_1,
-       32 <= block_size_2,
-       8192 <= block_size_0*block_size_1),
-   k!11 == k!10)
-  sc_0_2: Not(block_size_0 <= 0)
-  sc_0_14: Or(Not(And(32 <= block_size_0,
-           32 <= block_size_1,
-           32 <= block_size_2,
-           8192 <= block_size_0*block_size_1)),
-   k!11 == 1 + (block_size_0*block_size_1*block_size_2)/1024)
+  sc_0_3: 1 <= 512/block_size_2
+  sc_0_4: 512%block_size_2 == 0
   sc_0_1: Not(block_size_2 <= 0)
+  sc_0_8: 4096%block_size_0 == 0
+  sc_0_11: Or(block_size_1 == 0, k!58 == 64/block_size_1)
+  sc_0_6: 4096%(64*block_size_1) == 0
+  sc_0_7: 1 <= 4096/block_size_0
   sc_0_12: Or(Not(And(32 <= block_size_0,
            32 <= block_size_1,
            32 <= block_size_2,
            8192 >= block_size_0*block_size_1)),
-   k!10 ==
+   k!59 ==
    (1024*block_size_0*block_size_1 +
     8192*block_size_0*block_size_1*block_size_2)/
    (1024*block_size_0*block_size_1))
+  sc_0_2: Not(block_size_0 <= 0)
+  sc_0_5: 1 <= k!58
+  sc_0_9: __obj == (512/block_size_2)*(4096/block_size_0)*k!58*k!61
+  sc_0_14: Or(Not(And(32 <= block_size_0,
+           32 <= block_size_1,
+           32 <= block_size_2,
+           8192 <= block_size_0*block_size_1)),
+   k!60 == 1 + (block_size_0*block_size_1*block_size_2)/1024)
+  __obj_le_131072: (bound constraint)
   sc_0_13: Or(And(32 <= block_size_0,
        32 <= block_size_1,
        32 <= block_size_2,
        8192 >= block_size_0*block_size_1),
-   k!10 == 2147483648)
-  sc_0_3: 1 <= 512/block_size_2
-  sc_0_5: 1 <= k!9
-  sc_0_7: 1 <= 4096/block_size_0
-  sc_0_8: 4096%block_size_0 == 0
-  sc_0_6: 4096%(64*block_size_1) == 0
-  sc_0_4: 512%block_size_2 == 0
-  sc_0_11: Or(block_size_1 == 0, k!9 == 64/block_size_1)
+   k!59 == 2147483648)
+  sc_0_16: Or(Not(k!60 >= 3), k!61 == k!60)
   sc_0_0: Not(block_size_1 <= 0)
-  sc_0_17: Or(k!11 >= 3, k!12 == 3)
-  sc_0_16: Or(Not(k!11 >= 3), k!12 == k!11)
-  __obj_le_131072: (bound constraint)
+  sc_0_15: Or(And(32 <= block_size_0,
+       32 <= block_size_1,
+       32 <= block_size_2,
+       8192 <= block_size_0*block_size_1),
+   k!60 == k!59)
+  sc_0_17: Or(k!60 >= 3, k!61 == 3)
 
 ------------------------------------------------------------------------
 Variant [43/47]: _matmul__d1i1_d0i1__f01__v_d
@@ -2629,39 +2745,39 @@ Iteration factors:  seq_iter=1,  temp_iter=[1 × 1]  (product=1)
        32 <= block_size_1,
        32 <= block_size_2,
        8192 <= block_size_0*block_size_1),
-   k!64 == k!63)
-  sc_0_4: 512%block_size_2 == 0
-  sc_0_11: Or(block_size_1 == 0, k!62 == 64/block_size_1)
-  sc_0_6: 4096%(64*block_size_1) == 0
-  sc_0_7: 1 <= 4096/block_size_0
-  sc_0_9: __obj == (512/block_size_2)*(4096/block_size_0)*k!62*k!65
-  __obj_le_131072: (bound constraint)
-  sc_0_8: 4096%block_size_0 == 0
-  sc_0_1: Not(block_size_2 <= 0)
-  sc_0_5: 1 <= k!62
+   k!56 == k!55)
   sc_0_2: Not(block_size_0 <= 0)
+  sc_0_7: 1 <= 4096/block_size_0
+  sc_0_3: 1 <= 512/block_size_2
+  sc_0_5: 1 <= k!54
+  sc_0_8: 4096%block_size_0 == 0
+  sc_0_6: 4096%(64*block_size_1) == 0
   sc_0_12: Or(Not(And(32 <= block_size_0,
            32 <= block_size_1,
            32 <= block_size_2,
            8192 >= block_size_0*block_size_1)),
-   k!63 ==
+   k!55 ==
    (1024*block_size_0*block_size_1 +
     8192*block_size_0*block_size_1*block_size_2)/
    (1024*block_size_0*block_size_1))
-  sc_0_14: Or(Not(And(32 <= block_size_0,
-           32 <= block_size_1,
-           32 <= block_size_2,
-           8192 <= block_size_0*block_size_1)),
-   k!64 == 1 + (block_size_0*block_size_1*block_size_2)/1024)
-  sc_0_0: Not(block_size_1 <= 0)
-  sc_0_17: Or(k!64 >= 3, k!65 == 3)
-  sc_0_3: 1 <= 512/block_size_2
   sc_0_13: Or(And(32 <= block_size_0,
        32 <= block_size_1,
        32 <= block_size_2,
        8192 >= block_size_0*block_size_1),
-   k!63 == 2147483648)
-  sc_0_16: Or(Not(k!64 >= 3), k!65 == k!64)
+   k!55 == 2147483648)
+  sc_0_14: Or(Not(And(32 <= block_size_0,
+           32 <= block_size_1,
+           32 <= block_size_2,
+           8192 <= block_size_0*block_size_1)),
+   k!56 == 1 + (block_size_0*block_size_1*block_size_2)/1024)
+  sc_0_4: 512%block_size_2 == 0
+  sc_0_0: Not(block_size_1 <= 0)
+  sc_0_9: __obj == (512/block_size_2)*(4096/block_size_0)*k!54*k!57
+  sc_0_11: Or(block_size_1 == 0, k!54 == 64/block_size_1)
+  sc_0_17: Or(k!56 >= 3, k!57 == 3)
+  __obj_le_131072: (bound constraint)
+  sc_0_1: Not(block_size_2 <= 0)
+  sc_0_16: Or(Not(k!56 >= 3), k!57 == k!56)
 
 ------------------------------------------------------------------------
 Variant [44/47]: _matmul__d1i1_d0i1__f10__d_d
@@ -2696,77 +2812,6 @@ Iteration factors:  seq_iter=1,  temp_iter=[1 × 1]  (product=1)
     JSON: {'Ge': [{'Div': [{'Const': 4096}, {'Mul': [{'Sym': 'block_size_1'}, {'Const': 64}]}]}, {'Const': 1}]}
 
 [UNSAT Core] _matmul__d1i1_d0i1__f10__d_d (Optimum bound T>=131073)
-  sc_0_11: Or(block_size_1 == 0, k!17 == 64/block_size_1)
-  sc_0_6: 4096%block_size_0 == 0
-  sc_0_5: 1 <= 4096/block_size_0
-  sc_0_3: 1 <= 512/block_size_2
-  sc_0_9: __obj == (512/block_size_2)*(4096/block_size_0)*k!17*k!20
-  sc_0_1: Not(block_size_2 <= 0)
-  __obj_le_131072: (bound constraint)
-  sc_0_4: 512%block_size_2 == 0
-  sc_0_8: 4096%(64*block_size_1) == 0
-  sc_0_12: Or(Not(And(32 <= block_size_0,
-           32 <= block_size_1,
-           32 <= block_size_2,
-           8192 >= block_size_0*block_size_1)),
-   k!18 ==
-   (1024*block_size_0*block_size_1 +
-    8192*block_size_0*block_size_1*block_size_2)/
-   (1024*block_size_0*block_size_1))
-  sc_0_7: 1 <= k!17
-  sc_0_15: Or(And(32 <= block_size_0,
-       32 <= block_size_1,
-       32 <= block_size_2,
-       8192 <= block_size_0*block_size_1),
-   k!19 == k!18)
-  sc_0_17: Or(k!19 >= 4, k!20 == 4)
-  sc_0_0: Not(block_size_1 <= 0)
-  sc_0_16: Or(Not(k!19 >= 4), k!20 == k!19)
-  sc_0_2: Not(block_size_0 <= 0)
-  sc_0_14: Or(Not(And(32 <= block_size_0,
-           32 <= block_size_1,
-           32 <= block_size_2,
-           8192 <= block_size_0*block_size_1)),
-   k!19 == 1 + (block_size_0*block_size_1*block_size_2)/1024)
-  sc_0_13: Or(And(32 <= block_size_0,
-       32 <= block_size_1,
-       32 <= block_size_2,
-       8192 >= block_size_0*block_size_1),
-   k!18 == 2147483648)
-
-------------------------------------------------------------------------
-Variant [45/47]: _matmul__d1i1_d0i1__f10__a_d
-Optimal T_total: 131,073 cycles
-  block_size_0 = 4096
-  block_size_1 = 64
-  block_size_2 = 512
-
-Iteration factors:  seq_iter=1,  temp_iter=[1 × 1]  (product=1)
-
-  [ComputeScope]
-    Stage 2:
-      scenario[0]     131,073 cycles
-  → scope total        131,073 cycles
-
-  [MemoryScope]
-    Stage 2:
-      scenario[0]           4 cycles
-  → scope total              4 cycles
-
-  T_comp  =    131,073 cycles
-  T_mem   =          4 cycles
-  T_stage = max(T_comp, T_mem) = 131,073 cycles
-  T_total = 131,073 × 1 × 1 = 131,073 cycles
-
-[Active Constraints] _matmul__d1i1_d0i1__f10__a_d
-  hard[0]: Ge: 1 >= 1 (tight, slack=0)
-    JSON: {'Ge': [{'Div': [{'Const': 512}, {'Sym': 'block_size_2'}]}, {'Const': 1}]}
-  hard[2]: Ge: 1 >= 1 (tight, slack=0)
-    JSON: {'Ge': [{'Div': [{'Const': 4096}, {'Sym': 'block_size_0'}]}, {'Const': 1}]}
-  hard[4]: Ge: 1 >= 1 (tight, slack=0)
-    JSON: {'Ge': [{'Div': [{'Const': 4096}, {'Mul': [{'Sym': 'block_size_1'}, {'Const': 64}]}]}, {'Const': 1}]}
-
-[UNSAT Core] _matmul__d1i1_d0i1__f10__a_d (Optimum bound T>=131073)
   sc_0_9: __obj == (512/block_size_2)*(4096/block_size_0)*k!9*k!12
   __obj_le_131072: (bound constraint)
   sc_0_15: Or(And(32 <= block_size_0,
@@ -2806,6 +2851,77 @@ Iteration factors:  seq_iter=1,  temp_iter=[1 × 1]  (product=1)
   sc_0_16: Or(Not(k!11 >= 4), k!12 == k!11)
 
 ------------------------------------------------------------------------
+Variant [45/47]: _matmul__d1i1_d0i1__f10__a_d
+Optimal T_total: 131,073 cycles
+  block_size_0 = 4096
+  block_size_1 = 64
+  block_size_2 = 512
+
+Iteration factors:  seq_iter=1,  temp_iter=[1 × 1]  (product=1)
+
+  [ComputeScope]
+    Stage 2:
+      scenario[0]     131,073 cycles
+  → scope total        131,073 cycles
+
+  [MemoryScope]
+    Stage 2:
+      scenario[0]           4 cycles
+  → scope total              4 cycles
+
+  T_comp  =    131,073 cycles
+  T_mem   =          4 cycles
+  T_stage = max(T_comp, T_mem) = 131,073 cycles
+  T_total = 131,073 × 1 × 1 = 131,073 cycles
+
+[Active Constraints] _matmul__d1i1_d0i1__f10__a_d
+  hard[0]: Ge: 1 >= 1 (tight, slack=0)
+    JSON: {'Ge': [{'Div': [{'Const': 512}, {'Sym': 'block_size_2'}]}, {'Const': 1}]}
+  hard[2]: Ge: 1 >= 1 (tight, slack=0)
+    JSON: {'Ge': [{'Div': [{'Const': 4096}, {'Sym': 'block_size_0'}]}, {'Const': 1}]}
+  hard[4]: Ge: 1 >= 1 (tight, slack=0)
+    JSON: {'Ge': [{'Div': [{'Const': 4096}, {'Mul': [{'Sym': 'block_size_1'}, {'Const': 64}]}]}, {'Const': 1}]}
+
+[UNSAT Core] _matmul__d1i1_d0i1__f10__a_d (Optimum bound T>=131073)
+  sc_0_11: Or(block_size_1 == 0, k!9 == 64/block_size_1)
+  sc_0_3: 1 <= 512/block_size_2
+  sc_0_2: Not(block_size_0 <= 0)
+  sc_0_14: Or(Not(And(32 <= block_size_0,
+           32 <= block_size_1,
+           32 <= block_size_2,
+           8192 <= block_size_0*block_size_1)),
+   k!11 == 1 + (block_size_0*block_size_1*block_size_2)/1024)
+  sc_0_6: 4096%block_size_0 == 0
+  sc_0_12: Or(Not(And(32 <= block_size_0,
+           32 <= block_size_1,
+           32 <= block_size_2,
+           8192 >= block_size_0*block_size_1)),
+   k!10 ==
+   (1024*block_size_0*block_size_1 +
+    8192*block_size_0*block_size_1*block_size_2)/
+   (1024*block_size_0*block_size_1))
+  sc_0_13: Or(And(32 <= block_size_0,
+       32 <= block_size_1,
+       32 <= block_size_2,
+       8192 >= block_size_0*block_size_1),
+   k!10 == 2147483648)
+  sc_0_8: 4096%(64*block_size_1) == 0
+  sc_0_9: __obj == (512/block_size_2)*(4096/block_size_0)*k!9*k!12
+  sc_0_1: Not(block_size_2 <= 0)
+  sc_0_7: 1 <= k!9
+  sc_0_4: 512%block_size_2 == 0
+  sc_0_5: 1 <= 4096/block_size_0
+  sc_0_0: Not(block_size_1 <= 0)
+  sc_0_16: Or(Not(k!11 >= 4), k!12 == k!11)
+  sc_0_15: Or(And(32 <= block_size_0,
+       32 <= block_size_1,
+       32 <= block_size_2,
+       8192 <= block_size_0*block_size_1),
+   k!11 == k!10)
+  sc_0_17: Or(k!11 >= 4, k!12 == 4)
+  __obj_le_131072: (bound constraint)
+
+------------------------------------------------------------------------
 Variant [46/47]: _matmul__d1i1_d0i1__f10__h_d
 Optimal T_total: 131,073 cycles
   block_size_0 = 4096
@@ -2838,77 +2954,6 @@ Iteration factors:  seq_iter=1,  temp_iter=[1 × 1]  (product=1)
     JSON: {'Ge': [{'Div': [{'Const': 4096}, {'Mul': [{'Sym': 'block_size_1'}, {'Const': 64}]}]}, {'Const': 1}]}
 
 [UNSAT Core] _matmul__d1i1_d0i1__f10__h_d (Optimum bound T>=131073)
-  sc_0_15: Or(And(32 <= block_size_0,
-       32 <= block_size_1,
-       32 <= block_size_2,
-       8192 <= block_size_0*block_size_1),
-   k!56 == k!55)
-  sc_0_2: Not(block_size_0 <= 0)
-  sc_0_7: 1 <= k!54
-  sc_0_3: 1 <= 512/block_size_2
-  sc_0_5: 1 <= 4096/block_size_0
-  sc_0_8: 4096%(64*block_size_1) == 0
-  sc_0_6: 4096%block_size_0 == 0
-  sc_0_12: Or(Not(And(32 <= block_size_0,
-           32 <= block_size_1,
-           32 <= block_size_2,
-           8192 >= block_size_0*block_size_1)),
-   k!55 ==
-   (1024*block_size_0*block_size_1 +
-    8192*block_size_0*block_size_1*block_size_2)/
-   (1024*block_size_0*block_size_1))
-  sc_0_13: Or(And(32 <= block_size_0,
-       32 <= block_size_1,
-       32 <= block_size_2,
-       8192 >= block_size_0*block_size_1),
-   k!55 == 2147483648)
-  sc_0_14: Or(Not(And(32 <= block_size_0,
-           32 <= block_size_1,
-           32 <= block_size_2,
-           8192 <= block_size_0*block_size_1)),
-   k!56 == 1 + (block_size_0*block_size_1*block_size_2)/1024)
-  sc_0_4: 512%block_size_2 == 0
-  sc_0_0: Not(block_size_1 <= 0)
-  __obj_le_131072: (bound constraint)
-  sc_0_9: __obj == (512/block_size_2)*(4096/block_size_0)*k!54*k!57
-  sc_0_11: Or(block_size_1 == 0, k!54 == 64/block_size_1)
-  sc_0_17: Or(k!56 >= 3, k!57 == 3)
-  sc_0_1: Not(block_size_2 <= 0)
-  sc_0_16: Or(Not(k!56 >= 3), k!57 == k!56)
-
-------------------------------------------------------------------------
-Variant [47/47]: _matmul__d1i1_d0i1__f10__v_d
-Optimal T_total: 131,073 cycles
-  block_size_0 = 4096
-  block_size_1 = 64
-  block_size_2 = 512
-
-Iteration factors:  seq_iter=1,  temp_iter=[1 × 1]  (product=1)
-
-  [ComputeScope]
-    Stage 2:
-      scenario[0]     131,073 cycles
-  → scope total        131,073 cycles
-
-  [MemoryScope]
-    Stage 2:
-      scenario[0]           3 cycles
-  → scope total              3 cycles
-
-  T_comp  =    131,073 cycles
-  T_mem   =          3 cycles
-  T_stage = max(T_comp, T_mem) = 131,073 cycles
-  T_total = 131,073 × 1 × 1 = 131,073 cycles
-
-[Active Constraints] _matmul__d1i1_d0i1__f10__v_d
-  hard[0]: Ge: 1 >= 1 (tight, slack=0)
-    JSON: {'Ge': [{'Div': [{'Const': 512}, {'Sym': 'block_size_2'}]}, {'Const': 1}]}
-  hard[2]: Ge: 1 >= 1 (tight, slack=0)
-    JSON: {'Ge': [{'Div': [{'Const': 4096}, {'Sym': 'block_size_0'}]}, {'Const': 1}]}
-  hard[4]: Ge: 1 >= 1 (tight, slack=0)
-    JSON: {'Ge': [{'Div': [{'Const': 4096}, {'Mul': [{'Sym': 'block_size_1'}, {'Const': 64}]}]}, {'Const': 1}]}
-
-[UNSAT Core] _matmul__d1i1_d0i1__f10__v_d (Optimum bound T>=131073)
   sc_0_3: 1 <= 512/block_size_2
   sc_0_4: 512%block_size_2 == 0
   sc_0_1: Not(block_size_2 <= 0)
@@ -2946,5 +2991,76 @@ Iteration factors:  seq_iter=1,  temp_iter=[1 × 1]  (product=1)
        8192 <= block_size_0*block_size_1),
    k!60 == k!59)
   sc_0_17: Or(k!60 >= 3, k!61 == 3)
+
+------------------------------------------------------------------------
+Variant [47/47]: _matmul__d1i1_d0i1__f10__v_d
+Optimal T_total: 131,073 cycles
+  block_size_0 = 4096
+  block_size_1 = 64
+  block_size_2 = 512
+
+Iteration factors:  seq_iter=1,  temp_iter=[1 × 1]  (product=1)
+
+  [ComputeScope]
+    Stage 2:
+      scenario[0]     131,073 cycles
+  → scope total        131,073 cycles
+
+  [MemoryScope]
+    Stage 2:
+      scenario[0]           3 cycles
+  → scope total              3 cycles
+
+  T_comp  =    131,073 cycles
+  T_mem   =          3 cycles
+  T_stage = max(T_comp, T_mem) = 131,073 cycles
+  T_total = 131,073 × 1 × 1 = 131,073 cycles
+
+[Active Constraints] _matmul__d1i1_d0i1__f10__v_d
+  hard[0]: Ge: 1 >= 1 (tight, slack=0)
+    JSON: {'Ge': [{'Div': [{'Const': 512}, {'Sym': 'block_size_2'}]}, {'Const': 1}]}
+  hard[2]: Ge: 1 >= 1 (tight, slack=0)
+    JSON: {'Ge': [{'Div': [{'Const': 4096}, {'Sym': 'block_size_0'}]}, {'Const': 1}]}
+  hard[4]: Ge: 1 >= 1 (tight, slack=0)
+    JSON: {'Ge': [{'Div': [{'Const': 4096}, {'Mul': [{'Sym': 'block_size_1'}, {'Const': 64}]}]}, {'Const': 1}]}
+
+[UNSAT Core] _matmul__d1i1_d0i1__f10__v_d (Optimum bound T>=131073)
+  sc_0_1: Not(block_size_2 <= 0)
+  sc_0_5: 1 <= 4096/block_size_0
+  sc_0_2: Not(block_size_0 <= 0)
+  sc_0_4: 512%block_size_2 == 0
+  sc_0_6: 4096%block_size_0 == 0
+  sc_0_9: __obj == (512/block_size_2)*(4096/block_size_0)*k!58*k!61
+  sc_0_3: 1 <= 512/block_size_2
+  sc_0_7: 1 <= k!58
+  sc_0_0: Not(block_size_1 <= 0)
+  sc_0_12: Or(Not(And(32 <= block_size_0,
+           32 <= block_size_1,
+           32 <= block_size_2,
+           8192 >= block_size_0*block_size_1)),
+   k!59 ==
+   (1024*block_size_0*block_size_1 +
+    8192*block_size_0*block_size_1*block_size_2)/
+   (1024*block_size_0*block_size_1))
+  sc_0_8: 4096%(64*block_size_1) == 0
+  sc_0_14: Or(Not(And(32 <= block_size_0,
+           32 <= block_size_1,
+           32 <= block_size_2,
+           8192 <= block_size_0*block_size_1)),
+   k!60 == 1 + (block_size_0*block_size_1*block_size_2)/1024)
+  sc_0_11: Or(block_size_1 == 0, k!58 == 64/block_size_1)
+  sc_0_17: Or(k!60 >= 3, k!61 == 3)
+  sc_0_15: Or(And(32 <= block_size_0,
+       32 <= block_size_1,
+       32 <= block_size_2,
+       8192 <= block_size_0*block_size_1),
+   k!60 == k!59)
+  __obj_le_131072: (bound constraint)
+  sc_0_13: Or(And(32 <= block_size_0,
+       32 <= block_size_1,
+       32 <= block_size_2,
+       8192 >= block_size_0*block_size_1),
+   k!59 == 2147483648)
+  sc_0_16: Or(Not(k!60 >= 3), k!61 == k!60)
 
 ------------------------------------------------------------------------
