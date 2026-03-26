@@ -26,7 +26,7 @@ class SolverContext:
         ctx = SolverContext()
         ctx.load_symbols(variant["constraint_scope"]["metadata"]["symbols"])
         ctx.add_hard_constraints(variant["constraint_scope"]["hard_constraints"])
-        ctx.add_domain_constraints(default_symbol_domains())
+        ctx.add_domain_constraints(symbol_domains)
         result = ctx.find_optimum(t_total_expr, domains)
     """
 

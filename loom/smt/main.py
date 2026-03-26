@@ -23,7 +23,7 @@ from pathlib import Path
 from typing import Any
 
 from .utils.json_loader import load_variants
-from .utils.utils import default_symbol_domains, get_variant_name
+from .utils.utils import get_variant_name
 from .utils.reporter import (
     print_breakdown, print_unsat_core,
     print_active_constraints, print_mus, print_result_summary,
@@ -150,11 +150,17 @@ def run(
     output_path: Path | str | None = None,
     debug: bool = False,
     force_enumerate: bool = False,
+    symbol_domains: dict[str, list[int]] | None = None,
 ) -> dict[str, dict[str, int] | None]:
     """Execute the SMT solver on the provided ETG variants."""
     variants = load_variants(input_path)
     total = len(variants)
-    domains = default_symbol_domains()
+    if symbol_domains is None:
+        raise ValueError(
+            "symbol_domains must be provided. "
+            "Add a 'block_sizes' entry to your config with 'lb' and 'ub' per symbol."
+        )
+    domains = symbol_domains
 
     print(f"Solving {total} variants with {njobs} process(es)...")
     print()

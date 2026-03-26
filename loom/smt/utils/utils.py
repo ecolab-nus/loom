@@ -22,16 +22,24 @@ def powers_of_2_range(lo: int, hi: int) -> list[int]:
     return [2**k for k in range(lo_exp, hi_exp + 1)]
 
 
-def default_symbol_domains() -> dict[str, list[int]]:
-    """Return the default allowed values for each block-size symbol.
 
-    M, N: powers of 2 from 32 to 4096.
-    K:    powers of 2 from 32 to 512.
+def parse_user_block_sizes(block_sizes: dict[str, dict]) -> dict[str, list[int]]:
+    """Convert user-provided lb/ub bounds to domain lists for each symbol.
+
+    Args:
+        block_sizes: Mapping of symbol name → {"lb": int, "ub": int}.
+                     Both lb and ub must be powers of 2, with lb <= ub.
+
+    Returns:
+        Mapping of symbol name → sorted list of powers of 2 in [lb, ub].
+
+    Example:
+        >>> parse_user_block_sizes({"block_size_0": {"lb": 32, "ub": 128}})
+        {'block_size_0': [32, 64, 128]}
     """
     return {
-        "M": powers_of_2_range(32, 4096),
-        "N": powers_of_2_range(32, 4096),
-        "K": powers_of_2_range(32, 512),
+        sym: powers_of_2_range(bounds["lb"], bounds["ub"])
+        for sym, bounds in block_sizes.items()
     }
 
 

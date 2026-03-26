@@ -147,6 +147,7 @@ def run_step_3_smt_solve(
     debug: bool,
     constraints_dir: Path,
     force_enumerate: bool = False,
+    symbol_domains: dict[str, list[int]] | None = None,
 ) -> dict[str, Any]:
     """Step 3: SMT solver (finds optimal block sizes)."""
     logging.info("")
@@ -170,6 +171,7 @@ def run_step_3_smt_solve(
             output_path=solver_log,
             debug=debug,
             force_enumerate=force_enumerate,
+            symbol_domains=symbol_domains,
         )
 
     feasible_count = sum(1 for v in block_sizes.values() if v is not None)
@@ -265,7 +267,7 @@ def run_pipeline(
     hw_compute_dir: str | Path,
     njobs: int = 1,
     debug: bool = False,
-    block_sizes: dict[str, int] | None = None,
+    symbol_domains: dict[str, list[int]] | None = None,
     force_enumerate: bool = False,
 ) -> None:
     """Run the full Loom compilation pipeline.
@@ -286,9 +288,11 @@ def run_pipeline(
         Number of parallel workers for ETG resolution and SMT solving.
     debug:
         Enable detailed SMT analysis and write intermediate IRs/logs.
-    block_sizes:
-        Optional manual block size overrides. If provided, Steps 2 and 3
-        (ETG resolution and SMT solving) are skipped.
+    symbol_domains:
+        Optional per-symbol domain overrides mapping symbol name to a list
+        of allowed powers-of-2 values.  If provided, the SMT solver uses
+        these domains instead of the built-in defaults.  Steps 2 and 3
+        still run in all cases.
     """
     output_path = Path(output_path)
     ir_dir = output_path / "IRs"
@@ -305,18 +309,15 @@ def run_pipeline(
     )
     del mlir_text
 
-    # Step 2: ETG resolution & Step 3: SMT Solver
-    if block_sizes is not None:
-        logging.info("")
-        logging.info("⏭  block_sizes provided in config — skipping Steps 2 & 3.")
-        broadcast = validate_and_broadcast_block_sizes(block_sizes, etg_json_text)
-    else:
-        # Step 2: ETG resolution
-        run_step_2_etg_resolution(etg_json_text, njobs, constraints_dir)
+    # Step 2: ETG resolution
+    run_step_2_etg_resolution(etg_json_text, njobs, constraints_dir)
 
-        # Step 3: SMT Solver
-        resolved_etg_path = constraints_dir / "p02_resolved_etg.json"
-        broadcast = run_step_3_smt_solve(resolved_etg_path, njobs, debug, constraints_dir, force_enumerate)
+    # Step 3: SMT Solver
+    resolved_etg_path = constraints_dir / "p02_resolved_etg.json"
+    broadcast = run_step_3_smt_solve(
+        resolved_etg_path, njobs, debug, constraints_dir, force_enumerate,
+        symbol_domains=symbol_domains,
+    )
 
     del etg_json_text
 

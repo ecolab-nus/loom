@@ -217,8 +217,21 @@ class LoomKernel:
         if missing:
             parser.error(f"The following parameters are required: {', '.join(missing)}")
 
-        if block_sizes is not None and not isinstance(block_sizes, dict):
-            parser.error("Config 'block_sizes' must be a JSON object mapping symbol names to integers.")
+        symbol_domains = None
+        if block_sizes is not None:
+            if not isinstance(block_sizes, dict):
+                parser.error("Config 'block_sizes' must be a JSON object.")
+            for sym, bounds in block_sizes.items():
+                if not isinstance(bounds, dict) or "lb" not in bounds or "ub" not in bounds:
+                    parser.error(
+                        f"block_sizes['{sym}'] must be a dict with 'lb' and 'ub' keys."
+                    )
+                if bounds["lb"] > bounds["ub"]:
+                    parser.error(
+                        f"block_sizes['{sym}']: lb ({bounds['lb']}) must be <= ub ({bounds['ub']})."
+                    )
+            from loom.smt.utils.utils import parse_user_block_sizes  # noqa: PLC0415
+            symbol_domains = parse_user_block_sizes(block_sizes)
 
         setup_logging(args.debug)
         run_pipeline(
@@ -228,6 +241,6 @@ class LoomKernel:
             hw_compute_dir=hw_compute_dir,
             njobs=args.njobs,
             debug=args.debug,
-            block_sizes=block_sizes,
+            symbol_domains=symbol_domains,
             force_enumerate=args.force_enumerate,
         )
