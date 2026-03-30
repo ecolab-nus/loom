@@ -1,5 +1,5 @@
 #!/bin/bash
-# Build the loom-mlar eval_core evaluator binary.
+# Build the loom-mlar eval_system evaluator binary.
 #
 # The architecture definition currently lives in test code, so we invoke
 # `cargo test` to trigger the binary generation.  A future refactor should
@@ -9,7 +9,7 @@
 #   bash scripts/build-mlar.sh
 #
 # Output:
-#   third_party/loom-mlar/bin/eval_core
+#   third_party/loom-mlar/tests/2d_mesh/bin/eval_system
 
 set -euo pipefail
 
@@ -27,24 +27,19 @@ if ! command -v cargo &>/dev/null; then
     exit 1
 fi
 
-echo "Building eval_core binary (this may take a while on first run)..."
+echo "Building eval_system binary (this may take a while on first run)..."
 cd "$MLAR_DIR"
 
 # Run the specific test that generates the evaluator binary.
-cargo test --test 2d_mesh test_generate_core_evaluator_binary --release -- --nocapture
+cargo test --test 2d_mesh test_generate_system_evaluator_binary --release -- --nocapture
 
 # Verify the binary was produced.
-GENERATED="$MLAR_DIR/tests/2d_mesh/evaluators/eval_core"
+GENERATED="$MLAR_DIR/tests/2d_mesh/bin/eval_system"
 if [ ! -x "$GENERATED" ]; then
-    echo "ERROR: eval_core binary was not generated at $GENERATED"
+    echo "ERROR: eval_system binary was not generated at $GENERATED"
     exit 1
 fi
 
-# Copy to canonical location.
-mkdir -p "$MLAR_DIR/bin"
-cp "$GENERATED" "$MLAR_DIR/bin/eval_core"
-chmod +x "$MLAR_DIR/bin/eval_core"
-
 echo ""
-echo "eval_core binary built successfully:"
-echo "  $MLAR_DIR/bin/eval_core"
+echo "eval_system binary built successfully:"
+echo "  $GENERATED"

@@ -42,10 +42,9 @@ CLI produced (inherited from LoomKernel)
     python kernels/matmul.py --config kernels/config.json [--njobs N] [--debug]
 
     # Or pass paths directly on the command line
-    python kernels/matmul.py \\
-        --output-path  DIR \\
-        --df-mlir      PATH \\
-        --hw-compute-dir PATH \\
+    python kernels/matmul.py \
+        --output-path  DIR \
+        --hw-spec      PATH \
         [--njobs N] [--debug]
 """
 from __future__ import annotations
@@ -145,14 +144,9 @@ class LoomKernel:
             help="Root output directory.",
         )
         parser.add_argument(
-            "--df-mlir",
+            "--hw-spec",
             metavar="MLIR",
-            help="Path to DF hardware description MLIR.",
-        )
-        parser.add_argument(
-            "--hw-compute-dir",
-            metavar="DIR",
-            help="Path to directory containing hardware compute IR (.mlir) files.",
+            help="Path to hardware specification MLIR (topology + components).",
         )
         parser.add_argument(
             "--njobs",
@@ -201,18 +195,15 @@ class LoomKernel:
 
         # Resolve parameters: CLI takes precedence over config
         output_path = args.output_path or config_data.get("output_path")
-        df_mlir = args.df_mlir or config_data.get("df_mlir")
-        hw_compute_dir = args.hw_compute_dir or config_data.get("hw_compute_dir")
+        hw_spec = args.hw_spec or config_data.get("hw_spec") or config_data.get("df_mlir")
         block_sizes = config_data.get("block_sizes")
 
         # Required parameter check
         missing = []
         if not output_path:
             missing.append("--output-path (or 'output_path' in config)")
-        if not df_mlir:
-            missing.append("--df-mlir (or 'df_mlir' in config)")
-        if not hw_compute_dir:
-            missing.append("--hw-compute-dir (or 'hw_compute_dir' in config)")
+        if not hw_spec:
+            missing.append("--hw-spec (or 'hw_spec' in config)")
 
         if missing:
             parser.error(f"The following parameters are required: {', '.join(missing)}")
@@ -237,8 +228,7 @@ class LoomKernel:
         run_pipeline(
             generate_mlir_fn=cls.generate_mlir,
             output_path=output_path,
-            df_mlir=df_mlir,
-            hw_compute_dir=hw_compute_dir,
+            hw_spec=hw_spec,
             njobs=args.njobs,
             debug=args.debug,
             symbol_domains=symbol_domains,

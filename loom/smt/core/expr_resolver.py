@@ -88,14 +88,26 @@ def resolve_constraint(
     if tag == "Eq":
         _check_binary(tag, payload)
         return resolve_expr(payload[0], symbol_map) == resolve_expr(payload[1], symbol_map)
+    
+    if tag == "Ne":
+        _check_binary(tag, payload)
+        return resolve_expr(payload[0], symbol_map) != resolve_expr(payload[1], symbol_map)
 
     if tag == "Ge":
         _check_binary(tag, payload)
         return resolve_expr(payload[0], symbol_map) >= resolve_expr(payload[1], symbol_map)
 
+    if tag == "Gt":
+        _check_binary(tag, payload)
+        return resolve_expr(payload[0], symbol_map) > resolve_expr(payload[1], symbol_map)
+
     if tag == "Le":
         _check_binary(tag, payload)
         return resolve_expr(payload[0], symbol_map) <= resolve_expr(payload[1], symbol_map)
+
+    if tag == "Lt":
+        _check_binary(tag, payload)
+        return resolve_expr(payload[0], symbol_map) < resolve_expr(payload[1], symbol_map)
 
     if tag == "And":
         _check_variadic(tag, payload)

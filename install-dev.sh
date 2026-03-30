@@ -22,7 +22,7 @@
 #
 # Environment:
 #   MLIR_DIR            Path to MLIR cmake config directory
-#   LOOM_EVAL_CORE      Path to pre-built eval_core binary (skips Rust build)
+#   LOOM_EVAL_SYSTEM    Path to pre-built eval_system binary (skips Rust build)
 
 set -euo pipefail
 
@@ -120,12 +120,12 @@ if [ "$LOOM_HAS_CARGO" = "1" ] && [ "$SKIP_MLAR" = "0" ]; then
         echo "[SKIP] loom-mlar build (using pre-built binary: $LOOM_EVAL_CORE)"
     else
         echo ""
-        echo "=== Building loom-mlar eval_core binary ==="
+        echo "=== Building loom-mlar eval_system binary ==="
         bash "$REPO_ROOT/scripts/build-mlar.sh"
     fi
 else
     echo ""
-    echo "[SKIP] loom-mlar eval_core binary (Rust not available or --skip-mlar)"
+    echo "[SKIP] loom-mlar eval_system binary (Rust not available or --skip-mlar)"
 fi
 
 # ---------------------------------------------------------------------------
@@ -155,17 +155,12 @@ _check_import loom_pipeline
 _check_import helion_mlir
 _check_import loom
 
-# Check eval_core binary
-_eval_bin="${LOOM_EVAL_CORE:-$REPO_ROOT/third_party/loom-mlar/bin/eval_core}"
+# Check eval_system binary
+_eval_bin="${LOOM_EVAL_SYSTEM:-$REPO_ROOT/third_party/loom-mlar/tests/2d_mesh/bin/eval_system}"
 if [ -x "$_eval_bin" ]; then
-    printf "  %-16s %s\n" "eval_core" "OK ($_eval_bin)"
+    printf "  %-16s %s\n" "eval_system" "OK ($_eval_bin)"
 else
-    _legacy="$REPO_ROOT/third_party/loom-mlar/tests/2d_mesh/evaluators/eval_core"
-    if [ -x "$_legacy" ]; then
-        printf "  %-16s %s\n" "eval_core" "OK (legacy: $_legacy)"
-    else
-        printf "  %-16s %s\n" "eval_core" "NOT BUILT"
-    fi
+    printf "  %-16s %s\n" "eval_system" "NOT BUILT"
 fi
 
 echo ""
