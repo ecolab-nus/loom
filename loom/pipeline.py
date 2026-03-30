@@ -2,8 +2,8 @@
 
 This module is the sole owner of all pipeline logic. It exposes:
 
-    run_pipeline(generate_mlir_fn, *, output_path, df_mlir,
-                 hw_compute_dir, njobs, debug)
+    run_pipeline(generate_mlir_fn, *, output_path, hw_spec,
+                 njobs, debug)
 
 where ``generate_mlir_fn`` is any callable that returns stage-00 MLIR
 text.  The function is injected by the caller (usually a ``LoomKernel``
@@ -79,8 +79,7 @@ def run_step_0_frontend(
 
 def run_step_1_exploration(
     mlir_text: str,
-    df_mlir: str,
-    hw_compute_dir: str,
+    hw_spec: str,
     ir_dir: Path,
     constraints_dir: Path,
     debug: bool,
@@ -90,7 +89,7 @@ def run_step_1_exploration(
     logging.info("=" * 72)
     logging.info("STEP 1: EXPLORATION PIPELINE (stages 0→5)")
     logging.info("=" * 72)
-    logging.info(f"  DF MLIR    : {df_mlir}")
+    logging.info(f"  Hardware Spec: {hw_spec}")
 
     from loom_pipeline import run_exploration  # noqa: PLC0415
 
@@ -104,8 +103,7 @@ def run_step_1_exploration(
     with pipeline_timer("Step 1: Exploration Pipeline"):
         explored_mlir, etg_json_text = run_exploration(
             input_mlir=mlir_text,
-            df_mlir=df_mlir,
-            hw_compute_dir=hw_compute_dir,
+            hw_spec_file=hw_spec,
             produce_etg=True,
         )
         exploration_etg.write_text(etg_json_text)
@@ -263,8 +261,7 @@ def run_pipeline(
     generate_mlir_fn: Callable[[], str],
     *,
     output_path: str | Path,
-    df_mlir: str | Path,
-    hw_compute_dir: str | Path,
+    hw_spec: str | Path,
     njobs: int = 1,
     debug: bool = False,
     symbol_domains: dict[str, list[int]] | None = None,
@@ -280,10 +277,8 @@ def run_pipeline(
     output_path:
         Root output directory.  Sub-directories ``IRs/`` and
         ``constraints/`` are created automatically.
-    df_mlir:
-        Path to the DF hardware description MLIR file.
-    hw_compute_dir:
-        Path to the directory containing hardware compute IR (.mlir) files.
+    hw_spec:
+        Path to the hardware specification MLIR file.
     njobs:
         Number of parallel workers for ETG resolution and SMT solving.
     debug:
@@ -305,7 +300,7 @@ def run_pipeline(
 
     # Step 1: Exploration
     explored_mlir, etg_json_text = run_step_1_exploration(
-        mlir_text, str(df_mlir), str(hw_compute_dir), ir_dir, constraints_dir, debug
+        mlir_text, str(hw_spec), ir_dir, constraints_dir, debug
     )
     del mlir_text
 
