@@ -1,5 +1,9 @@
 {
     "output_path": "test/flash_attention_2Dmesh",
-    "df_mlir": "third_party/loom-dataflow/test/Dialect/DataflowDialect/2D_mesh.mlir",
-    "hw_compute_dir": "third_party/loom-mlar/tests/2d_mesh/compute"
+    "hw_spec": "third_party/loom-mlar/tests/2d_mesh/2d_mesh_torus.mlir",
+    "block_sizes": {
+        "block_size_0": {"lb": 4, "ub":4},
+        "block_size_1": {"lb": 64, "ub": 64},
+        "block_size_2": {"lb": 128, "ub": 128}
+    }
 }
