@@ -13,18 +13,11 @@ TODO: Replace subprocess-based invocation with a native Python extension built
 from __future__ import annotations
 
 import json
-import os
-import subprocess
 from pathlib import Path
 
-# Re-exports for backward compatibility
 from .etg_resolver import resolve_etg_variants, validate_scenarios
-from .evaluator_core import (
-    evaluate_schedule, mock_evaluate_schedule, resolve_schedule, 
-    _fill_func_scenarios, _DEFAULT_EVALUATOR
-)
+from .evaluator_core import evaluate_schedule, resolve_schedule
 from .json_formatter import smart_json_dumps
-from .schedule_utils import contains_sequential as _contains_sequential
 
 
 def evaluate_schedule_file(

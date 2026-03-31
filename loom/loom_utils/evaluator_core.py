@@ -63,50 +63,14 @@ def evaluate_schedule(
     return json.loads(result.stdout)
 
 
-def mock_evaluate_schedule(schedule: dict) -> dict:
-    """Return placeholder scenarios without calling the Rust binary."""
-    inner = schedule["Sequential"]
-    schedules = inner.get("schedules", [])
-
-    mock_scenario = {
-        "constraints": "True",
-        "time_cost": {"Concrete": {"Const": 1}},
-    }
-
-    # Fill each Func's scenarios.
-    new_schedules = []
-    func_count = 0
-    for sched in schedules:
-        if "Func" in sched:
-            new_func = {**sched["Func"], "scenarios": [mock_scenario]}
-            new_schedules.append({"Func": new_func})
-            func_count += 1
-        else:
-            new_schedules.append(sched)
-
-    combined_scenario = {
-        "constraints": "True",
-        "time_cost": {"Concrete": {"Const": func_count}},
-    }
-
-    return {
-        "scenarios": [combined_scenario],
-        "schedules": new_schedules,
-    }
-
-
-def _fill_func_scenarios(schedules, *, evaluator_path=None, evaluator_fn=None):
+def _fill_func_scenarios(schedules, *, evaluator_path=None):
     """Fill empty Func-level scenarios inside *schedules*."""
     filled = []
     for sched in schedules:
         if "Func" in sched and not sched["Func"].get("scenarios"):
             wrapper = {"Sequential": {"schedules": [sched], "scenarios": []}}
-            if evaluator_fn is not None:
-                result = evaluator_fn(wrapper)
-            else:
-                full_result = evaluate_schedule(wrapper, evaluator_path=evaluator_path)
-                result = full_result["Sequential"]
-            func_scenarios = result.get("scenarios", [])
+            full_result = evaluate_schedule(wrapper, evaluator_path=evaluator_path)
+            func_scenarios = full_result["Sequential"].get("scenarios", [])
             filled.append({"Func": {**sched["Func"], "scenarios": func_scenarios}})
         else:
             filled.append(sched)
@@ -116,11 +80,10 @@ def _fill_func_scenarios(schedules, *, evaluator_path=None, evaluator_fn=None):
 def resolve_schedule(
     node,
     evaluator_path: Path | str | None = None,
-    evaluator_fn=None,
 ) -> dict:
     """Walk *node* and evaluate every innermost Sequential with the Rust binary."""
     if isinstance(node, list):
-        return [resolve_schedule(item, evaluator_path, evaluator_fn) for item in node]
+        return [resolve_schedule(item, evaluator_path) for item in node]
 
     if not isinstance(node, dict):
         return node
@@ -129,21 +92,17 @@ def resolve_schedule(
         inner = node["Sequential"]
         schedules = inner.get("schedules", [])
         if not any(_contains_sequential(child) for child in schedules):
-            if evaluator_fn is not None:
-                evaluated_fields = evaluator_fn({"Sequential": inner})
-            else:
-                full_result = evaluate_schedule(
-                    {"Sequential": inner}, evaluator_path=evaluator_path
-                )
-                evaluated_fields = full_result["Sequential"]
+            full_result = evaluate_schedule(
+                {"Sequential": inner}, evaluator_path=evaluator_path
+            )
+            evaluated_fields = full_result["Sequential"]
             filled_inner = {**inner, **evaluated_fields}
             filled_inner["schedules"] = _fill_func_scenarios(
                 filled_inner.get("schedules", []),
                 evaluator_path=evaluator_path,
-                evaluator_fn=evaluator_fn,
             )
             return {**node, "Sequential": filled_inner}
-        new_schedules = [resolve_schedule(child, evaluator_path, evaluator_fn) for child in schedules]
+        new_schedules = [resolve_schedule(child, evaluator_path) for child in schedules]
         return {**node, "Sequential": {**inner, "schedules": new_schedules}}
 
-    return {k: resolve_schedule(v, evaluator_path, evaluator_fn) for k, v in node.items()}
+    return {k: resolve_schedule(v, evaluator_path) for k, v in node.items()}
