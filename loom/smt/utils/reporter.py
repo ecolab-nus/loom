@@ -157,29 +157,73 @@ def print_unsat_core(
 
 def print_active_constraints(
     variant_name: str,
-    active: list[tuple[int, dict, str]],
+    analyses: list,
     file: TextIO = None,
 ) -> None:
-    """Print active (tight) constraints at the optimum.
+    """Print constraint analysis at the optimum.
+
+    Groups results by status: TIGHT and DISCRETE_WALL shown in detail,
+    binary constraints summarized as counts.
 
     Args:
         variant_name: Name of the variant.
-        active: List of (index, constraint_json, description_str) tuples
-                as produced by ``SolverContext.find_active_constraints()``.
+        analyses: List of ``ConstraintAnalysis`` objects as produced by
+                  ``SolverContext.find_active_constraints()``.
         file: Output stream. Defaults to sys.stdout.
     """
+    from ..core.solver_context import ConstraintStatus
+
     if file is None:
         file = sys.stdout
 
     def p(*args, **kwargs):
         print(*args, **kwargs, file=file)
 
-    p(f"[Active Constraints] {variant_name}")
-    if not active:
-        p("  (no tight inequality constraints)")
-    for idx, c_json, desc in active:
-        p(f"  hard[{idx}]: {desc}")
-        p(f"    JSON: {c_json}")
+    p(f"[Constraint Analysis] {variant_name}")
+
+    tight = [a for a in analyses if a.status == ConstraintStatus.TIGHT]
+    walls = [a for a in analyses if a.status == ConstraintStatus.DISCRETE_WALL]
+    slacked = [a for a in analyses if a.status == ConstraintStatus.ACTIVE_SLACK]
+    satisfied = [a for a in analyses if a.status == ConstraintStatus.SATISFIED]
+    violated = [a for a in analyses if a.status == ConstraintStatus.VIOLATED]
+
+    if violated:
+        p("  VIOLATED (should not happen at feasible optimum):")
+        for a in violated:
+            p(f"    hard[{a.index}]: {a.description}")
+
+    if tight:
+        p("  TIGHT constraints (slack=0):")
+        for a in tight:
+            p(f"    hard[{a.index}]: {a.description}")
+
+    if walls:
+        p("  DISCRETE WALLS (next step would violate):")
+        for a in walls:
+            p(f"    hard[{a.index}]: {a.description}")
+            for s in a.symbol_steps:
+                if s.next_value is not None and s.would_violate:
+                    p(f"      {s.symbol}: {s.current_value} -> {s.next_value}"
+                      f"  would cost +{s.step_cost} (VIOLATES)")
+            for sub in a.sub_analyses:
+                if sub.status == ConstraintStatus.DISCRETE_WALL:
+                    p(f"      sub: {sub.description}")
+
+    if slacked:
+        p("  Inequality constraints with slack:")
+        for a in slacked:
+            p(f"    hard[{a.index}]: {a.description}")
+
+    # Summarize binary constraints
+    sat_tags: dict[str, int] = {}
+    for a in satisfied:
+        sat_tags[a.tag] = sat_tags.get(a.tag, 0) + 1
+    if sat_tags:
+        parts = [f"{count} {tag}" for tag, count in sorted(sat_tags.items())]
+        p(f"  Other satisfied: {', '.join(parts)}")
+
+    if not any([tight, walls, slacked, satisfied, violated]):
+        p("  (no constraints)")
     p()
 
 

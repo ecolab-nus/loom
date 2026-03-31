@@ -74,7 +74,7 @@ def solve_variant(
         hard_constraints = variant["constraint_scope"]["hard_constraints"]
         if min_val is not None:
             active_constraints = ctx.find_active_constraints(
-                hard_constraints, assignments,
+                hard_constraints, assignments, domains,
             )
         else:
             mus = ctx.find_mus(hard_constraints, domains)

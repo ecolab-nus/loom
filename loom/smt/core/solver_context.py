@@ -12,11 +12,84 @@ bounded integer domains is decidable and complete, so a binary search on
 the objective value guarantees the true global minimum.
 """
 
+from dataclasses import dataclass, field
+from enum import Enum
 from itertools import product as iter_product
 
 import z3
 
 from .expr_resolver import resolve_constraint, resolve_expr
+
+
+class ConstraintStatus(Enum):
+    """Classification of a constraint at the optimal assignment."""
+
+    TIGHT = "tight"              # slack == 0
+    DISCRETE_WALL = "wall"       # slack > 0 but no symbol can step up without violating
+    ACTIVE_SLACK = "slack"       # slack > 0 and some symbol CAN step
+    SATISFIED = "satisfied"      # binary constraint satisfied (Divisible, Eq, Ne)
+    VIOLATED = "violated"        # constraint violated (should not happen at feasible point)
+
+
+@dataclass
+class SymbolStepInfo:
+    """Per-symbol headroom analysis for an inequality constraint."""
+
+    symbol: str
+    current_value: int
+    next_value: int | None       # None if at max domain value
+    step_cost: int | None        # Decrease in slack when symbol steps; None if no next value
+    would_violate: bool          # True if stepping would violate the constraint
+
+
+@dataclass
+class ConstraintAnalysis:
+    """Full analysis result for a single hard constraint."""
+
+    index: int                   # Index in hard_constraints list
+    constraint_json: dict
+    tag: str                     # "Ge", "Le", "Divisible", etc.
+    status: ConstraintStatus
+    description: str             # Human-readable summary
+    slack: int | None = None
+    lhs_value: int | None = None
+    rhs_value: int | None = None
+    symbol_steps: list[SymbolStepInfo] = field(default_factory=list)
+    sub_analyses: list['ConstraintAnalysis'] = field(default_factory=list)
+
+
+def _collect_symbols(expr: dict | str | list) -> set[str]:
+    """Recursively collect all symbol names from a JSON expression or constraint."""
+    if isinstance(expr, (str, int, float)):
+        return set()
+    if isinstance(expr, list):
+        result: set[str] = set()
+        for item in expr:
+            result |= _collect_symbols(item)
+        return result
+    if not isinstance(expr, dict):
+        return set()
+    tag, payload = next(iter(expr.items()))
+    if tag == "Sym":
+        return {payload}
+    if tag == "Const":
+        return set()
+    if tag == "Divisible":
+        return _collect_symbols(payload["x"]) | _collect_symbols(payload["by"])
+    if tag in ("Ge", "Le", "Gt", "Lt", "Eq", "Ne", "Mul", "Div"):
+        return _collect_symbols(payload[0]) | _collect_symbols(payload[1])
+    if tag in ("Add", "Min", "And"):
+        result = set()
+        for item in payload:
+            result |= _collect_symbols(item)
+        return result
+    if tag == "IfElse":
+        return (
+            _collect_symbols(payload["cond"])
+            | _collect_symbols(payload["then_expr"])
+            | _collect_symbols(payload["else_expr"])
+        )
+    return set()
 
 
 class SolverContext:
@@ -285,32 +358,207 @@ class SolverContext:
         self,
         hard_constraints: list[dict],
         assignments: dict[str, int],
-    ) -> list[tuple[int, dict, str]]:
-        """Identify hard constraints that are tight at the given assignments.
+        domains: dict[str, list[int]],
+    ) -> list[ConstraintAnalysis]:
+        """Analyze all hard constraints at the given assignments.
 
-        A Ge constraint ``lhs >= rhs`` is "active" when ``lhs_val == rhs_val``.
-        Eq constraints are always active at any feasible point.
+        For inequality constraints (Ge, Le, Gt, Lt), computes slack and
+        per-symbol step costs to detect "discrete walls" — constraints that
+        are not tight but block every upward step in the domain.
+
+        For binary constraints (Divisible, Eq, Ne), reports satisfied/violated.
 
         Returns:
-            List of ``(index, constraint_json, description_str)`` for tight
-            constraints.
+            List of ``ConstraintAnalysis`` for every hard constraint.
         """
         concrete_map = {name: z3.IntVal(val) for name, val in assignments.items()}
-        active: list[tuple[int, dict, str]] = []
+        sorted_domains = {
+            name: sorted(vals) for name, vals in domains.items()
+        }
+        results: list[ConstraintAnalysis] = []
         for i, c in enumerate(hard_constraints):
-            tag, payload = next(iter(c.items()))
-            if tag == "Ge":
-                lhs_val = z3.simplify(resolve_expr(payload[0], concrete_map)).as_long()
-                rhs_val = z3.simplify(resolve_expr(payload[1], concrete_map)).as_long()
-                if lhs_val == rhs_val:
-                    desc = f"Ge: {lhs_val} >= {rhs_val} (tight, slack=0)"
-                    active.append((i, c, desc))
-            elif tag == "Eq":
-                lhs_val = z3.simplify(resolve_expr(payload[0], concrete_map)).as_long()
-                rhs_val = z3.simplify(resolve_expr(payload[1], concrete_map)).as_long()
-                desc = f"Eq: {lhs_val} == {rhs_val}"
-                active.append((i, c, desc))
-        return active
+            results.append(
+                self._analyze_single_constraint(
+                    i, c, concrete_map, assignments, sorted_domains,
+                )
+            )
+        return results
+
+    def _analyze_single_constraint(
+        self,
+        index: int,
+        constraint: dict,
+        concrete_map: dict[str, z3.ArithRef],
+        assignments: dict[str, int],
+        sorted_domains: dict[str, list[int]],
+    ) -> ConstraintAnalysis:
+        """Analyze one constraint, dispatching by tag."""
+        tag, payload = next(iter(constraint.items()))
+
+        if tag in ("Ge", "Le", "Gt", "Lt"):
+            return self._analyze_inequality(
+                index, constraint, tag, payload,
+                concrete_map, assignments, sorted_domains,
+            )
+        if tag == "Divisible":
+            return self._analyze_divisible(index, constraint, payload, concrete_map)
+        if tag in ("Eq", "Ne"):
+            return self._analyze_equality(index, constraint, tag, payload, concrete_map)
+        if tag == "And":
+            sub = [
+                self._analyze_single_constraint(
+                    index, sc, concrete_map, assignments, sorted_domains,
+                )
+                for sc in payload
+            ]
+            has_wall = any(s.status == ConstraintStatus.DISCRETE_WALL for s in sub)
+            has_tight = any(s.status == ConstraintStatus.TIGHT for s in sub)
+            status = (
+                ConstraintStatus.DISCRETE_WALL if has_wall
+                else ConstraintStatus.TIGHT if has_tight
+                else ConstraintStatus.SATISFIED
+            )
+            return ConstraintAnalysis(
+                index=index, constraint_json=constraint, tag=tag,
+                status=status,
+                description=f"And: {len(payload)} sub-constraints",
+                sub_analyses=sub,
+            )
+        # Unknown tag — report as satisfied
+        return ConstraintAnalysis(
+            index=index, constraint_json=constraint, tag=tag,
+            status=ConstraintStatus.SATISFIED,
+            description=f"{tag}: (unhandled constraint type)",
+        )
+
+    def _analyze_inequality(
+        self,
+        index: int,
+        constraint: dict,
+        tag: str,
+        payload: list,
+        concrete_map: dict[str, z3.ArithRef],
+        assignments: dict[str, int],
+        sorted_domains: dict[str, list[int]],
+    ) -> ConstraintAnalysis:
+        """Analyze a Ge/Le/Gt/Lt constraint with per-symbol headroom."""
+        lhs_val = z3.simplify(resolve_expr(payload[0], concrete_map)).as_long()
+        rhs_val = z3.simplify(resolve_expr(payload[1], concrete_map)).as_long()
+
+        # Compute slack (positive = satisfied)
+        if tag in ("Le", "Lt"):
+            slack = rhs_val - lhs_val
+        else:
+            slack = lhs_val - rhs_val
+
+        # Per-symbol step analysis
+        symbols = _collect_symbols(constraint)
+        symbol_steps: list[SymbolStepInfo] = []
+        for sym_name in sorted(symbols):
+            if sym_name not in sorted_domains or sym_name not in assignments:
+                continue
+            dom = sorted_domains[sym_name]
+            curr_val = assignments[sym_name]
+            try:
+                curr_idx = dom.index(curr_val)
+            except ValueError:
+                continue
+            next_val = dom[curr_idx + 1] if curr_idx + 1 < len(dom) else None
+
+            if next_val is not None:
+                modified_map = {**concrete_map, sym_name: z3.IntVal(next_val)}
+                new_lhs = z3.simplify(resolve_expr(payload[0], modified_map)).as_long()
+                new_rhs = z3.simplify(resolve_expr(payload[1], modified_map)).as_long()
+                if tag in ("Le", "Lt"):
+                    new_slack = new_rhs - new_lhs
+                    step_cost = slack - new_slack  # how much slack decreased
+                else:
+                    new_slack = new_lhs - new_rhs
+                    step_cost = slack - new_slack
+                if tag == "Le":
+                    would_violate = new_lhs > new_rhs
+                elif tag == "Lt":
+                    would_violate = new_lhs >= new_rhs
+                elif tag == "Ge":
+                    would_violate = new_lhs < new_rhs
+                else:  # Gt
+                    would_violate = new_lhs <= new_rhs
+            else:
+                step_cost = None
+                would_violate = False
+
+            symbol_steps.append(SymbolStepInfo(
+                symbol=sym_name, current_value=curr_val,
+                next_value=next_val, step_cost=step_cost,
+                would_violate=would_violate,
+            ))
+
+        # Classify
+        steppable = [s for s in symbol_steps if s.next_value is not None]
+        if slack == 0:
+            status = ConstraintStatus.TIGHT
+        elif slack < 0:
+            status = ConstraintStatus.VIOLATED
+        elif steppable and all(s.would_violate for s in steppable):
+            status = ConstraintStatus.DISCRETE_WALL
+        else:
+            status = ConstraintStatus.ACTIVE_SLACK
+
+        op = "<=" if tag in ("Le", "Lt") else ">="
+        desc = f"{tag}: {lhs_val} {op} {rhs_val} (slack={slack})"
+        if status == ConstraintStatus.DISCRETE_WALL:
+            blocked = [s.symbol for s in steppable if s.would_violate]
+            desc += f" [DISCRETE WALL -- blocks: {', '.join(blocked)}]"
+
+        return ConstraintAnalysis(
+            index=index, constraint_json=constraint, tag=tag,
+            status=status, description=desc,
+            slack=slack, lhs_value=lhs_val, rhs_value=rhs_val,
+            symbol_steps=symbol_steps,
+        )
+
+    @staticmethod
+    def _analyze_divisible(
+        index: int,
+        constraint: dict,
+        payload: dict,
+        concrete_map: dict[str, z3.ArithRef],
+    ) -> ConstraintAnalysis:
+        """Analyze a Divisible constraint (binary: satisfied or violated)."""
+        x_val = z3.simplify(resolve_expr(payload["x"], concrete_map)).as_long()
+        by_val = z3.simplify(resolve_expr(payload["by"], concrete_map)).as_long()
+        satisfied = (by_val != 0) and (x_val % by_val == 0)
+        status = ConstraintStatus.SATISFIED if satisfied else ConstraintStatus.VIOLATED
+        return ConstraintAnalysis(
+            index=index, constraint_json=constraint, tag="Divisible",
+            status=status,
+            description=f"Divisible: {x_val} % {by_val} == 0 ({'yes' if satisfied else 'NO'})",
+            lhs_value=x_val, rhs_value=by_val,
+        )
+
+    @staticmethod
+    def _analyze_equality(
+        index: int,
+        constraint: dict,
+        tag: str,
+        payload: list,
+        concrete_map: dict[str, z3.ArithRef],
+    ) -> ConstraintAnalysis:
+        """Analyze an Eq or Ne constraint (binary)."""
+        lhs_val = z3.simplify(resolve_expr(payload[0], concrete_map)).as_long()
+        rhs_val = z3.simplify(resolve_expr(payload[1], concrete_map)).as_long()
+        if tag == "Eq":
+            satisfied = lhs_val == rhs_val
+            desc = f"Eq: {lhs_val} == {rhs_val}"
+        else:
+            satisfied = lhs_val != rhs_val
+            desc = f"Ne: {lhs_val} != {rhs_val}"
+        status = ConstraintStatus.SATISFIED if satisfied else ConstraintStatus.VIOLATED
+        return ConstraintAnalysis(
+            index=index, constraint_json=constraint, tag=tag,
+            status=status, description=desc,
+            lhs_value=lhs_val, rhs_value=rhs_val,
+        )
 
     def find_mus(
         self,
