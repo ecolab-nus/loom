@@ -43,7 +43,7 @@ class Matmul(LoomKernel):
     kernel_name = "matmul"
 
     M: int = 4096
-    K: int = 512
+    K: int = 32
     N: int = 4096
 
     # Assign the helion-decorated function as a class attribute.

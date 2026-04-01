@@ -19,6 +19,7 @@ from itertools import product as iter_product
 import z3
 
 from .expr_resolver import resolve_constraint, resolve_expr
+from ..utils.expr_printer import constraint_to_str
 
 
 class ConstraintStatus(Enum):
@@ -50,7 +51,8 @@ class ConstraintAnalysis:
     constraint_json: dict
     tag: str                     # "Ge", "Le", "Divisible", etc.
     status: ConstraintStatus
-    description: str             # Human-readable summary
+    description: str             # Human-readable concrete summary (e.g. "1 >= 1")
+    symbolic: str = ""           # Human-readable symbolic form (e.g. "32/tile_k >= 1")
     slack: int | None = None
     lhs_value: int | None = None
     rhs_value: int | None = None
@@ -108,7 +110,8 @@ class SolverContext:
         self.symbol_map: dict[str, z3.ArithRef] = {}
         self.boolean_names: set[str] = set()
         self._constraints: list[z3.BoolRef] = []
-        self._tracking_vars: dict[str, tuple[z3.BoolRef, z3.BoolRef]] = {}
+        # Each entry: (tracker_bool, z3_constraint, compact_display_str_or_None)
+        self._tracking_vars: dict[str, tuple[z3.BoolRef, z3.BoolRef, str | None]] = {}
         self.last_unsat_core_info: list[tuple[str, str]] | None = None
         self.debug = debug
 
@@ -300,7 +303,8 @@ class SolverContext:
                     track_name = f"sc_{i}_{j}"
                     track_var = z3.Bool(track_name)
                     self.solver.assert_and_track(c, track_var)
-                    self._tracking_vars[track_name] = (track_var, c)
+                    compact = self._detect_domain_pattern(c)
+                    self._tracking_vars[track_name] = (track_var, c, compact)
                 else:
                     self.solver.add(c)
                 self._constraints.append(c)
@@ -337,10 +341,64 @@ class SolverContext:
         for v in core:
             name = str(v)
             if name in self._tracking_vars:
-                info.append((name, str(self._tracking_vars[name][1])))
+                _track_var, z3_constraint, compact = self._tracking_vars[name]
+                display = compact if compact is not None else str(z3_constraint)
+                info.append((name, display))
             else:
                 info.append((name, "(bound constraint)"))
         self.last_unsat_core_info = info
+
+    @staticmethod
+    def _detect_domain_pattern(constraint: z3.BoolRef) -> str | None:
+        """Detect Or(sym == v1, sym == v2, ...) and return a compact display string.
+
+        Returns a compact string like ``'tile_m ∈ {32, 64, ..., 4096} [128 values, step=32]'``
+        if the constraint matches the pattern, or ``None`` otherwise.
+        """
+        if not z3.is_or(constraint):
+            return None
+
+        children = constraint.children()
+        if not children:
+            return None
+
+        # All children must be (sym == IntVal)
+        sym_name: str | None = None
+        values: list[int] = []
+        for child in children:
+            if not (z3.is_eq(child) and len(child.children()) == 2):
+                return None
+            lhs, rhs = child.children()
+            # Normalise: ensure lhs is a bare variable, rhs is a constant
+            if z3.is_int_value(lhs) and z3.is_const(rhs):
+                lhs, rhs = rhs, lhs
+            if not (z3.is_const(lhs) and z3.is_int_value(rhs)):
+                return None
+            name = str(lhs)
+            if sym_name is None:
+                sym_name = name
+            elif sym_name != name:
+                return None  # different symbols — not a domain block
+            values.append(rhs.as_long())
+
+        if sym_name is None or len(values) < 2:
+            return None
+
+        values.sort()
+        n = len(values)
+        lo, hi = values[0], values[-1]
+
+        # Detect uniform step
+        steps = {values[i + 1] - values[i] for i in range(n - 1)}
+        step_str = f", step={next(iter(steps))}" if len(steps) == 1 else ""
+
+        # Show first 2 and last value with ellipsis, or all values if 5 or fewer
+        if n <= 5:
+            vals_str = ", ".join(str(v) for v in values)
+        else:
+            vals_str = f"{values[0]}, {values[1]}, ..., {values[-1]}"
+
+        return f"{sym_name} ∈ {{{vals_str}}}  [{n} values{step_str}]"
 
     def _enumerate_all(
         self,
@@ -537,9 +595,11 @@ class SolverContext:
             blocked = [s.symbol for s in steppable if s.would_violate]
             desc += f" [DISCRETE WALL -- blocks: {', '.join(blocked)}]"
 
+        symbolic = constraint_to_str(constraint)
+
         return ConstraintAnalysis(
             index=index, constraint_json=constraint, tag=tag,
-            status=status, description=desc,
+            status=status, description=desc, symbolic=symbolic,
             slack=slack, lhs_value=lhs_val, rhs_value=rhs_val,
             symbol_steps=symbol_steps,
         )
@@ -556,10 +616,12 @@ class SolverContext:
         by_val = z3.simplify(resolve_expr(payload["by"], concrete_map)).as_long()
         satisfied = (by_val != 0) and (x_val % by_val == 0)
         status = ConstraintStatus.SATISFIED if satisfied else ConstraintStatus.VIOLATED
+        symbolic = constraint_to_str(constraint)
         return ConstraintAnalysis(
             index=index, constraint_json=constraint, tag="Divisible",
             status=status,
             description=f"Divisible: {x_val} % {by_val} == 0 ({'yes' if satisfied else 'NO'})",
+            symbolic=symbolic,
             lhs_value=x_val, rhs_value=by_val,
         )
 
@@ -581,9 +643,10 @@ class SolverContext:
             satisfied = lhs_val != rhs_val
             desc = f"Ne: {lhs_val} != {rhs_val}"
         status = ConstraintStatus.SATISFIED if satisfied else ConstraintStatus.VIOLATED
+        symbolic = constraint_to_str(constraint)
         return ConstraintAnalysis(
             index=index, constraint_json=constraint, tag=tag,
-            status=status, description=desc,
+            status=status, description=desc, symbolic=symbolic,
             lhs_value=lhs_val, rhs_value=rhs_val,
         )
 

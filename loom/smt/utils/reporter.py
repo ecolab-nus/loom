@@ -155,6 +155,19 @@ def print_unsat_core(
     p()
 
 
+def _print_constraint_line(p, analysis) -> None:
+    """Format one ConstraintAnalysis line: symbolic → concrete if available."""
+    from ..core.solver_context import ConstraintAnalysis
+    a: ConstraintAnalysis = analysis
+    prefix = f"    hard[{a.index}]:"
+    if a.symbolic:
+        # Symbolic form on one line, concrete result indented below
+        p(f"{prefix} {a.symbolic}")
+        p(f"    {' ' * len(f'hard[{a.index}]:')}  → {a.description}")
+    else:
+        p(f"{prefix} {a.description}")
+
+
 def print_active_constraints(
     variant_name: str,
     analyses: list,
@@ -190,17 +203,17 @@ def print_active_constraints(
     if violated:
         p("  VIOLATED (should not happen at feasible optimum):")
         for a in violated:
-            p(f"    hard[{a.index}]: {a.description}")
+            _print_constraint_line(p, a)
 
     if tight:
         p("  TIGHT constraints (slack=0):")
         for a in tight:
-            p(f"    hard[{a.index}]: {a.description}")
+            _print_constraint_line(p, a)
 
     if walls:
         p("  DISCRETE WALLS (next step would violate):")
         for a in walls:
-            p(f"    hard[{a.index}]: {a.description}")
+            _print_constraint_line(p, a)
             for s in a.symbol_steps:
                 if s.next_value is not None and s.would_violate:
                     p(f"      {s.symbol}: {s.current_value} -> {s.next_value}"
@@ -212,7 +225,7 @@ def print_active_constraints(
     if slacked:
         p("  Inequality constraints with slack:")
         for a in slacked:
-            p(f"    hard[{a.index}]: {a.description}")
+            _print_constraint_line(p, a)
 
     # Summarize binary constraints
     sat_tags: dict[str, int] = {}
