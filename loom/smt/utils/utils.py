@@ -3,23 +3,22 @@
 import math
 
 
-def powers_of_2_range(lo: int, hi: int) -> list[int]:
-    """Return all powers of 2 in the closed interval [lo, hi].
+def multiples_of_32_range(lo: int, hi: int) -> list[int]:
+    """Return all multiples of 32 in the closed interval [lo, hi].
 
     Args:
-        lo: Lower bound (must itself be a power of 2).
-        hi: Upper bound (must itself be a power of 2).
+        lo: Lower bound (rounded up to the nearest multiple of 32).
+        hi: Upper bound (inclusive).
 
     Returns:
-        Sorted list of powers of 2 from lo to hi inclusive.
+        Sorted list of multiples of 32 from ceil32(lo) to hi inclusive.
 
     Example:
-        >>> powers_of_2_range(32, 256)
-        [32, 64, 128, 256]
+        >>> multiples_of_32_range(32, 256)
+        [32, 64, 96, 128, 160, 192, 224, 256]
     """
-    lo_exp = int(math.log2(lo))
-    hi_exp = int(math.log2(hi))
-    return [2**k for k in range(lo_exp, hi_exp + 1)]
+    start = math.ceil(lo / 32) * 32
+    return list(range(start, hi + 1, 32))
 
 
 
@@ -28,17 +27,17 @@ def parse_user_block_sizes(block_sizes: dict[str, dict]) -> dict[str, list[int]]
 
     Args:
         block_sizes: Mapping of symbol name → {"lb": int, "ub": int}.
-                     Both lb and ub must be powers of 2, with lb <= ub.
+                     Both lb and ub must be multiples of 32, with lb <= ub.
 
     Returns:
-        Mapping of symbol name → sorted list of powers of 2 in [lb, ub].
+        Mapping of symbol name → sorted list of multiples of 32 in [lb, ub].
 
     Example:
         >>> parse_user_block_sizes({"block_size_0": {"lb": 32, "ub": 128}})
-        {'block_size_0': [32, 64, 128]}
+        {'block_size_0': [32, 64, 96, 128]}
     """
     return {
-        sym: powers_of_2_range(bounds["lb"], bounds["ub"])
+        sym: multiples_of_32_range(bounds["lb"], bounds["ub"])
         for sym, bounds in block_sizes.items()
     }
 
@@ -53,7 +52,7 @@ def derive_domains_from_etg(variants: list[dict]) -> dict[str, list[int]]:
         variants: Variant list loaded from the ETG JSON.
 
     Returns:
-        Mapping of symbol name → sorted list of powers of 2 in [1, ub].
+        Mapping of symbol name → sorted list of multiples of 32 in [32, ub].
         Symbols without a natural_ub (or with old string-format info) are omitted.
     """
     bounds: dict[str, dict] = {}
@@ -65,7 +64,7 @@ def derive_domains_from_etg(variants: list[dict]) -> dict[str, list[int]]:
             .items()
         ):
             if isinstance(info, dict) and "natural_ub" in info and sym not in bounds:
-                bounds[sym] = {"lb": 1, "ub": int(info["natural_ub"])}
+                bounds[sym] = {"lb": 32, "ub": int(info["natural_ub"])}
     return parse_user_block_sizes(bounds)
 
 

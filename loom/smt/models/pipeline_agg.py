@@ -37,11 +37,22 @@ def compute_total_time(
         symbol_map: Z3 integer variables keyed by symbol name.
 
     Returns:
-        A Z3 ArithRef for T_total = max(T_comp, T_mem) * seq_iter * Πtemp_iter.
+        A Z3 ArithRef for T_total = T_stage * seq_iter * Πtemp_iter,
+        where T_stage = max(T_comp, T_mem) if double-buffered (overlap),
+        or T_stage = T_comp + T_mem if not (sequential).
     """
     t_comp = _aggregate_scope(variant["compute_scope"], symbol_map)
     t_mem = _aggregate_scope(variant["memory_scope"], symbol_map)
-    t_stage = z3.If(t_comp >= t_mem, t_comp, t_mem)
+
+    # is_double_buffer: symbolic Int {0,1} — Z3 decides the optimal value.
+    # Double-buffered: compute and memory overlap → max(T_comp, T_mem)
+    # Not double-buffered: sequential execution   → T_comp + T_mem
+    is_db = symbol_map.get("is_double_buffer")
+    t_max = z3.If(t_comp >= t_mem, t_comp, t_mem)
+    if is_db is not None:
+        t_stage = z3.If(is_db == 1, t_max, t_comp + t_mem)
+    else:
+        t_stage = t_max  # backward compat: default to max if no boolean declared
 
     iter_num = variant["constraint_scope"]["metadata"]["iter_num"]
     seq_iter = resolve_expr(iter_num["seq_iter"], symbol_map)

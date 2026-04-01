@@ -106,6 +106,7 @@ class SolverContext:
     def __init__(self, debug: bool = False) -> None:
         self.solver = z3.Solver()
         self.symbol_map: dict[str, z3.ArithRef] = {}
+        self.boolean_names: set[str] = set()
         self._constraints: list[z3.BoolRef] = []
         self._tracking_vars: dict[str, tuple[z3.BoolRef, z3.BoolRef]] = {}
         self.last_unsat_core_info: list[tuple[str, str]] | None = None
@@ -130,6 +131,30 @@ class SolverContext:
             guard = var > 0
             self.solver.add(guard)
             self._constraints.append(guard)
+
+    def load_booleans(self, bool_names: list[str]) -> dict[str, list[int]]:
+        """Declare symbolic boolean variables as Z3 Int vars in {0, 1}.
+
+        Boolean variables participate in optimization just like integer symbols.
+        The solver determines True (1) or False (0) to minimize cost.
+
+        Args:
+            bool_names: list of boolean variable names from metadata.
+
+        Returns:
+            Domain dict mapping each boolean name to [0, 1], suitable for
+            merging into the main domains dict.
+        """
+        bool_domains: dict[str, list[int]] = {}
+        for name in bool_names:
+            var = z3.Int(name)
+            self.symbol_map[name] = var
+            self.boolean_names.add(name)
+            domain_c = z3.Or(var == 0, var == 1)
+            self.solver.add(domain_c)
+            self._constraints.append(domain_c)
+            bool_domains[name] = [0, 1]
+        return bool_domains
 
     def add_hard_constraints(self, constraints: list[dict]) -> None:
         """Resolve and add every hard constraint from the ETG JSON.

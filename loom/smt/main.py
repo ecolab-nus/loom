@@ -59,11 +59,17 @@ def solve_variant(
     """
     ctx = SolverContext(debug=debug)
     ctx.load_symbols(variant["constraint_scope"]["metadata"]["symbols"])
+    bool_domains = ctx.load_booleans(
+        variant["constraint_scope"]["metadata"].get("booleans", [])
+    )
     ctx.add_hard_constraints(variant["constraint_scope"]["hard_constraints"])
     ctx.add_domain_constraints(domains)
 
+    # Merge boolean domains so find_optimum/enumerate can iterate over them.
+    domains_with_bools = {**domains, **bool_domains}
+
     t_total = compute_total_time(variant, ctx.symbol_map)
-    result = ctx.find_optimum(t_total, domains, force_enumerate=force_enumerate)
+    result = ctx.find_optimum(t_total, domains_with_bools, force_enumerate=force_enumerate)
 
     min_val, assignments = result if result is not None else (None, None)
 
@@ -74,10 +80,10 @@ def solve_variant(
         hard_constraints = variant["constraint_scope"]["hard_constraints"]
         if min_val is not None:
             active_constraints = ctx.find_active_constraints(
-                hard_constraints, assignments, domains,
+                hard_constraints, assignments, domains_with_bools,
             )
         else:
-            mus = ctx.find_mus(hard_constraints, domains)
+            mus = ctx.find_mus(hard_constraints, domains_with_bools)
 
     return {
         "variant":     variant,
