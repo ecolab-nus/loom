@@ -43,6 +43,32 @@ def parse_user_block_sizes(block_sizes: dict[str, dict]) -> dict[str, list[int]]
     }
 
 
+def derive_domains_from_etg(variants: list[dict]) -> dict[str, list[int]]:
+    """Derive symbol domains from natural_ub embedded in ETG metadata.
+
+    Reads natural_ub from each symbol's info dict and reuses
+    parse_user_block_sizes to produce power-of-2 domain lists.
+
+    Args:
+        variants: Variant list loaded from the ETG JSON.
+
+    Returns:
+        Mapping of symbol name → sorted list of powers of 2 in [1, ub].
+        Symbols without a natural_ub (or with old string-format info) are omitted.
+    """
+    bounds: dict[str, dict] = {}
+    for variant in variants:
+        for sym, info in (
+            variant.get("constraint_scope", {})
+            .get("metadata", {})
+            .get("symbols", {})
+            .items()
+        ):
+            if isinstance(info, dict) and "natural_ub" in info and sym not in bounds:
+                bounds[sym] = {"lb": 1, "ub": int(info["natural_ub"])}
+    return parse_user_block_sizes(bounds)
+
+
 def get_variant_name(variant: dict, index: int) -> str:
     """Return the name of a variant, defaulting to 'variant_{index}'."""
     return variant.get("variant_name", f"variant_{index}")

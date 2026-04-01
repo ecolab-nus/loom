@@ -23,7 +23,7 @@ from pathlib import Path
 from typing import Any
 
 from .utils.json_loader import load_variants
-from .utils.utils import get_variant_name
+from .utils.utils import get_variant_name, derive_domains_from_etg
 from .utils.reporter import (
     print_breakdown, print_unsat_core,
     print_active_constraints, print_mus, print_result_summary,
@@ -155,12 +155,25 @@ def run(
     """Execute the SMT solver on the provided ETG variants."""
     variants = load_variants(input_path)
     total = len(variants)
-    if symbol_domains is None:
+
+    # Baseline: ETG-derived domains from natural_ub (lb=1)
+    etg_domains = derive_domains_from_etg(variants)
+    # Merge: user-supplied domains override per symbol
+    domains = {**etg_domains, **(symbol_domains or {})}
+
+    # Assert: every symbol referenced in the ETG must have a domain
+    missing = sorted({
+        sym
+        for v in variants
+        for sym in v.get("constraint_scope", {}).get("metadata", {}).get("symbols", {})
+        if sym not in domains
+    })
+    if missing:
         raise ValueError(
-            "symbol_domains must be provided. "
-            "Add a 'block_sizes' entry to your config with 'lb' and 'ub' per symbol."
+            "No domain found for symbols: " + ", ".join(missing) + ". "
+            "Either add 'block_sizes' in your config or ensure the ETG carries "
+            "'natural_ub' for these symbols."
         )
-    domains = symbol_domains
 
     print(f"Solving {total} variants with {njobs} process(es)...")
     print()

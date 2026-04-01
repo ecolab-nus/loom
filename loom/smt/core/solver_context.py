@@ -111,16 +111,18 @@ class SolverContext:
         self.last_unsat_core_info: list[tuple[str, str]] | None = None
         self.debug = debug
 
-    def load_symbols(self, metadata_symbols: dict[str, str]) -> None:
+    def load_symbols(self, metadata_symbols: dict[str, str | dict]) -> None:
         """Declare Z3 integer variables for each symbol in the metadata.
 
         Args:
-            metadata_symbols: e.g. {"BM": "int", "BN": "int", "BK": "int"}
+            metadata_symbols: maps symbol name to either a plain type string
+                (e.g. ``"int"``) or a dict ``{"type": "int", "natural_ub": 4096}``.
 
         Raises:
             ValueError: If a symbol type other than "int" is encountered.
         """
-        for name, typ in metadata_symbols.items():
+        for name, info in metadata_symbols.items():
+            typ = info["type"] if isinstance(info, dict) else info
             if typ != "int":
                 raise ValueError(f"Unsupported symbol type '{typ}' for symbol '{name}'")
             var = z3.Int(name)
