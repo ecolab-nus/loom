@@ -56,7 +56,9 @@ def evaluate_schedule(
     result = subprocess.run(
         [str(binary)],
         input=json.dumps(schedule),
-        capture_output=True,
+        # capture_output=True,
+        stdout=subprocess.PIPE,
+        stderr=None,
         text=True,
         check=True,
     )
