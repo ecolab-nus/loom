@@ -117,18 +117,31 @@ def _aggregate_scope(
 
     for stage in scope["stages"]:
         parallel = stage["Parallel"]
-        assert "Sequential" in parallel, (
-            f"Stage {stage.get('stage_id', '?')}: Parallel must contain Sequential"
+        assert isinstance(parallel, list), (
+            f"Stage {stage.get('stage_id', '?')}: Parallel must be a list"
         )
 
-        seq = parallel["Sequential"]
-        scenarios = seq["scenarios"]
-        assert scenarios, (
-            f"Stage {stage.get('stage_id', '?')}: Sequential must have non-empty scenarios"
-        )
+        par_times: list[z3.ArithRef] = []
+        for i, item in enumerate(parallel):
+            assert "Sequential" in item, (
+                f"Stage {stage.get('stage_id', '?')}.Parallel[{i}]: missing 'Sequential'"
+            )
+            seq = item["Sequential"]
+            scenarios = seq["scenarios"]
+            assert scenarios, (
+                f"Stage {stage.get('stage_id', '?')}.Parallel[{i}].Sequential: missing scenarios"
+            )
+            par_times.append(_fold_scenarios(scenarios, symbol_map))
 
-        seq_time = _fold_scenarios(scenarios, symbol_map)
-        stage_times.append(seq_time)
+        # Within a stage, multiple parallel workloads are running → max execution time.
+        if len(par_times) == 1:
+            stage_time = par_times[0]
+        else:
+            stage_time = par_times[0]
+            for pt in par_times[1:]:
+                stage_time = z3.If(pt >= stage_time, pt, stage_time)
+        
+        stage_times.append(stage_time)
 
     if not stage_times:
         raise ValueError(

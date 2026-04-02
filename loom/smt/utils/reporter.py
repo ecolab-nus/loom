@@ -95,23 +95,40 @@ def print_breakdown(
             stage_id = stage.get("stage_id", "?")
             p(f"    Stage {stage_id}:")
 
-            seq = stage["Parallel"]["Sequential"]
-            scenarios = seq["scenarios"]
+            parallel = stage["Parallel"]
+            stage_max_cost = 0
 
-            matched_idx = None
-            matched_cost = None
-            for si, scenario in enumerate(scenarios):
-                cond_z3 = resolve_constraint(scenario["constraints"], concrete_map)
-                if z3.is_true(z3.simplify(cond_z3)):
-                    matched_idx = si
-                    matched_cost = eval_expr(scenario["time_cost"], concrete_map)
-                    break
+            for i, parallel_item in enumerate(parallel):
+                seq = parallel_item["Sequential"]
+                scenarios = seq["scenarios"]
 
-            if matched_cost is not None:
-                p(f"      scenario[{matched_idx}]  {matched_cost:>10,} cycles")
-                scope_total += matched_cost
-            else:
-                p(f"      (no scenario matched)")
+                matched_idx = None
+                matched_cost = None
+                for si, scenario in enumerate(scenarios):
+                    cond_z3 = resolve_constraint(scenario["constraints"], concrete_map)
+                    if z3.is_true(z3.simplify(cond_z3)):
+                        matched_idx = si
+                        matched_cost = eval_expr(scenario["time_cost"], concrete_map)
+                        break
+
+                if matched_cost is not None:
+                    label = f"scenario[{matched_idx}]"
+                    if len(parallel) > 1:
+                        label = f"Parallel[{i}] {label}"
+                    p(f"      {label:<20s}  {matched_cost:>10,} cycles")
+                    
+                    if matched_cost > stage_max_cost:
+                        stage_max_cost = matched_cost
+                else:
+                    label = "(no scenario matched)"
+                    if len(parallel) > 1:
+                        label = f"Parallel[{i}] {label}"
+                    p(f"      {label}")
+
+            if len(parallel) > 1:
+                p(f"      {'→ stage max':20s}  {stage_max_cost:>10,} cycles")
+            
+            scope_total += stage_max_cost
 
         p(f"  {'→ scope total':16s}  {scope_total:>10,} cycles")
         p()

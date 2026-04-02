@@ -65,11 +65,16 @@ def _validate_variant(v: dict, index: int) -> None:
             if "Parallel" not in stage:
                 raise ValueError(f"{sp}: missing 'Parallel'")
             parallel = stage["Parallel"]
-            if "Sequential" not in parallel:
-                raise ValueError(f"{sp}.Parallel: missing 'Sequential'")
-            seq = parallel["Sequential"]
-            if "scenarios" not in seq:
-                raise ValueError(f"{sp}.Parallel.Sequential: missing 'scenarios'")
-            scenarios = seq["scenarios"]
-            if not isinstance(scenarios, list) or not scenarios:
-                raise ValueError(f"{sp}.Parallel.Sequential.scenarios: must be a non-empty list")
+            if not isinstance(parallel, list):
+                raise ValueError(f"{sp}.Parallel: must be a list")
+            
+            for k, parallel_item in enumerate(parallel):
+                ip = f"{sp}.Parallel[{k}]"
+                if "Sequential" not in parallel_item:
+                    raise ValueError(f"{ip}: missing 'Sequential'")
+                seq = parallel_item["Sequential"]
+                if "scenarios" not in seq:
+                    raise ValueError(f"{ip}.Sequential: missing 'scenarios'")
+                scenarios = seq["scenarios"]
+                if not isinstance(scenarios, list) or not scenarios:
+                    raise ValueError(f"{ip}.Sequential.scenarios: must be a non-empty list")
