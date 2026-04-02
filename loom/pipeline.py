@@ -146,6 +146,7 @@ def run_step_3_smt_solve(
     constraints_dir: Path,
     force_enumerate: bool = False,
     symbol_domains: dict[str, list[int]] | None = None,
+    optimal_only: bool = False,
 ) -> dict[str, Any]:
     """Step 3: SMT solver (finds optimal block sizes)."""
     logging.info("")
@@ -170,6 +171,7 @@ def run_step_3_smt_solve(
             debug=debug,
             force_enumerate=force_enumerate,
             symbol_domains=symbol_domains,
+            optimal_only=optimal_only,
         )
 
     feasible_count = sum(1 for v in block_sizes.values() if v is not None)
@@ -266,6 +268,7 @@ def run_pipeline(
     debug: bool = False,
     symbol_domains: dict[str, list[int]] | None = None,
     force_enumerate: bool = False,
+    optimal_only: bool = False,
 ) -> None:
     """Run the full Loom compilation pipeline.
 
@@ -288,6 +291,8 @@ def run_pipeline(
         of allowed powers-of-2 values.  If provided, the SMT solver uses
         these domains instead of the built-in defaults.  Steps 2 and 3
         still run in all cases.
+    optimal_only:
+        Optional boolean to keep only the optimal candidates.
     """
     output_path = Path(output_path)
     ir_dir = output_path / "IRs"
@@ -312,6 +317,7 @@ def run_pipeline(
     broadcast = run_step_3_smt_solve(
         resolved_etg_path, njobs, debug, constraints_dir, force_enumerate,
         symbol_domains=symbol_domains,
+        optimal_only=optimal_only,
     )
 
     del etg_json_text

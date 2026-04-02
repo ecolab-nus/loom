@@ -157,6 +157,7 @@ def run(
     debug: bool = False,
     force_enumerate: bool = False,
     symbol_domains: dict[str, list[int]] | None = None,
+    optimal_only: bool = False,
 ) -> dict[str, dict[str, int] | None]:
     """Execute the SMT solver on the provided ETG variants."""
     variants = load_variants(input_path)
@@ -222,6 +223,14 @@ def run(
 
     best = min(feasible, key=lambda r: r["min_val"])
 
+    if optimal_only:
+        print("\nNote: --optimal-only is passed. We only materialize the optimal candidates. Other candidates' block sizes are dropped.")
+        optimal_val = best["min_val"]
+        for r in results:
+            vname = get_variant_name(r["variant"], r["index"])
+            if r["min_val"] is not None and r["min_val"] > optimal_val:
+                block_sizes[vname] = None
+
     print()
     print("=" * 72)
     print("GLOBAL BEST")
@@ -268,6 +277,12 @@ def main() -> None:
         default=False,
         help="Skip Z3 binary search and brute-force enumerate all domain combinations.",
     )
+    parser.add_argument(
+        "--optimal-only",
+        action="store_true",
+        default=False,
+        help="Keep only the optimal candidates and remove all others in the final output.",
+    )
     args = parser.parse_args()
     block_sizes = run(
         input_path=args.input,
@@ -275,6 +290,7 @@ def main() -> None:
         output_path=args.output,
         debug=args.debug,
         force_enumerate=args.force_enumerate,
+        optimal_only=args.optimal_only,
     )
     if not any(v is not None for v in block_sizes.values()):
         sys.exit(2)

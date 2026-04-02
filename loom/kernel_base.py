@@ -167,6 +167,12 @@ class LoomKernel:
             default=False,
             help="Skip Z3 binary search and brute-force enumerate all domain combinations.",
         )
+        parser.add_argument(
+            "--optimal-only",
+            action="store_true",
+            default=False,
+            help="Keep only the optimal candidates and remove all others in the final output.",
+        )
         return parser
 
     @classmethod
@@ -233,4 +239,5 @@ class LoomKernel:
             debug=args.debug,
             symbol_domains=symbol_domains,
             force_enumerate=args.force_enumerate,
+            optimal_only=args.optimal_only,
         )
