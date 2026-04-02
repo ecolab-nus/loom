@@ -441,19 +441,22 @@ class SolverContext:
         names, value_lists = zip(*active)
         best: tuple[int, dict[str, int]] | None = None
 
+        # Load constraints ONCE — push/pop to assert each combo's concrete assignments.
+        s = z3.Solver()
+        s.add(self._constraints)
+
         for combo in iter_product(*value_lists):
-            s = z3.Solver()
-            s.add(self._constraints)
+            s.push()
             for name, val in zip(names, combo):
                 s.add(self.symbol_map[name] == val)
 
-            if s.check() != z3.sat:
-                continue
+            if s.check() == z3.sat:
+                model = s.model()
+                val = model.eval(objective, model_completion=True).as_long()
+                if best is None or val < best[0]:
+                    best = (val, dict(zip(names, combo)))
 
-            model = s.model()
-            val = model.eval(objective, model_completion=True).as_long()
-            if best is None or val < best[0]:
-                best = (val, dict(zip(names, combo)))
+            s.pop()
 
         if best is None:
             self.last_unsat_core_info = [
