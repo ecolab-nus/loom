@@ -19,6 +19,7 @@ from itertools import product as iter_product
 import z3
 
 from .expr_resolver import resolve_constraint, resolve_expr
+from .expr_transforms import ExprTransformer
 from ..utils.expr_printer import constraint_to_str
 
 
@@ -267,33 +268,59 @@ class SolverContext:
     # ------------------------------------------------------------------
 
     def _simplify(self, objective: z3.ArithRef) -> z3.ArithRef:
-        """Run Z3 tactic pipeline to canonicalize constraints and objective.
+        """Eliminate division, then run Z3 tactic pipeline.
 
-        Introduces an auxiliary variable ``__obj == objective``, runs the
-        tactic chain, and rebuilds the solver with simplified constraints.
+        Pipeline
+        --------
+        1. Collect all current solver assertions + ``__obj == objective``
+           into a Z3 Goal.
+        2. Apply :class:`~loom.smt.core.expr_transforms.ExprTransformer`
+           to the whole batch in one pass: every ``div`` / ``mod`` node is
+           replaced by a fresh quotient / remainder auxiliary integer
+           variable together with its Euclidean-division polynomial
+           constraints.  The solver receives a clean, division-free system.
+        3. Run the Z3 tactic chain on the polynomial Goal to canonicalize
+           and simplify before the binary-search loop.
+        4. Rebuild the solver from the simplified sub-goals.
+
         When ``self.debug`` is True, constraints are added via
         ``assert_and_track()`` so that UNSAT cores can be extracted later.
 
-        Returns:
-            The ``__obj`` auxiliary variable (bound to the simplified
-            objective inside the solver).
+        Returns
+        -------
+        z3.ArithRef
+            The ``__obj`` auxiliary variable, now bound inside the solver.
         """
+        obj_var = z3.Int('__obj')
+
+        # ── Step 1: Build the raw Goal ────────────────────────────────────
+        raw_goal = z3.Goal()
+        for c in self.solver.assertions():
+            raw_goal.add(c)
+        raw_goal.add(obj_var == objective)
+
+        # ── Step 2: Eliminate all div / mod in one batch ──────────────────
+        xf = ExprTransformer()
+        clean_goal = z3.Goal()
+        for c in raw_goal:
+            clean_goal.add(xf.rewrite(c))
+        # Aux variables need their own polynomial constraints in the goal.
+        for aux_c in xf.aux_constraints:
+            clean_goal.add(aux_c)
+
+        # ── Step 3: Z3 tactic chain (polynomial-friendly) ────────────────
         tactic = z3.Then(
             'simplify',           # constant folding, flatten, basic arith
             'propagate-values',   # substitute known equalities
-            'ctx-simplify',       # context-dependent simplification
             'elim-term-ite',      # lift if-then-else out of terms
+            'ctx-simplify',       # context-dependent simplification
+            # 'solve-eqs',
+            # 'bit-blast',
+            # 'sat',
         )
+        simplified = tactic(clean_goal)
 
-        obj_var = z3.Int('__obj')
-
-        goal = z3.Goal()
-        for c in self.solver.assertions():
-            goal.add(c)
-        goal.add(obj_var == objective)
-
-        simplified = tactic(goal)
-
+        # ── Step 4: Rebuild solver from simplified sub-goals ──────────────
         self.solver.reset()
         self._constraints = []
         self._tracking_vars = {}
@@ -516,6 +543,31 @@ class SolverContext:
             description=f"{tag}: (unhandled constraint type)",
         )
 
+    @staticmethod
+    def _eval_concrete(expr: z3.ArithRef) -> int:
+        """Reduce a fully-concrete Z3 ArithRef to a Python int.
+
+        ``z3.simplify()`` can return a ``RatNumRef`` (e.g. ``1/1``) even
+        when the mathematical result is an exact integer.  This helper
+        handles both ``IntNumRef`` (fast path) and ``RatNumRef`` /
+        residual ``ArithRef`` (solver fallback).
+        """
+        simplified = z3.simplify(expr)
+        if z3.is_int_value(simplified):
+            return simplified.as_long()
+        if z3.is_rational_value(simplified):
+            # RatNumRef: numerator / denominator — both should be integers.
+            num = simplified.numerator_as_long()
+            den = simplified.denominator_as_long()
+            return num // den  # integer (floor) division, matching Z3 semantics
+        # Last resort: ask a fresh solver for the integer value.
+        tmp = z3.Int("__eval_tmp")
+        s = z3.Solver()
+        s.add(tmp == simplified)
+        if s.check() == z3.sat:
+            return s.model().eval(tmp, model_completion=True).as_long()
+        raise RuntimeError(f"Cannot evaluate expression to a concrete integer: {expr}")
+
     def _analyze_inequality(
         self,
         index: int,
@@ -527,8 +579,8 @@ class SolverContext:
         sorted_domains: dict[str, list[int]],
     ) -> ConstraintAnalysis:
         """Analyze a Ge/Le/Gt/Lt constraint with per-symbol headroom."""
-        lhs_val = z3.simplify(resolve_expr(payload[0], concrete_map)).as_long()
-        rhs_val = z3.simplify(resolve_expr(payload[1], concrete_map)).as_long()
+        lhs_val = self._eval_concrete(resolve_expr(payload[0], concrete_map))
+        rhs_val = self._eval_concrete(resolve_expr(payload[1], concrete_map))
 
         # Compute slack (positive = satisfied)
         if tag in ("Le", "Lt"):
@@ -552,8 +604,8 @@ class SolverContext:
 
             if next_val is not None:
                 modified_map = {**concrete_map, sym_name: z3.IntVal(next_val)}
-                new_lhs = z3.simplify(resolve_expr(payload[0], modified_map)).as_long()
-                new_rhs = z3.simplify(resolve_expr(payload[1], modified_map)).as_long()
+                new_lhs = self._eval_concrete(resolve_expr(payload[0], modified_map))
+                new_rhs = self._eval_concrete(resolve_expr(payload[1], modified_map))
                 if tag in ("Le", "Lt"):
                     new_slack = new_rhs - new_lhs
                     step_cost = slack - new_slack  # how much slack decreased
@@ -604,16 +656,16 @@ class SolverContext:
             symbol_steps=symbol_steps,
         )
 
-    @staticmethod
     def _analyze_divisible(
+        self,
         index: int,
         constraint: dict,
         payload: dict,
         concrete_map: dict[str, z3.ArithRef],
     ) -> ConstraintAnalysis:
         """Analyze a Divisible constraint (binary: satisfied or violated)."""
-        x_val = z3.simplify(resolve_expr(payload["x"], concrete_map)).as_long()
-        by_val = z3.simplify(resolve_expr(payload["by"], concrete_map)).as_long()
+        x_val = self._eval_concrete(resolve_expr(payload["x"], concrete_map))
+        by_val = self._eval_concrete(resolve_expr(payload["by"], concrete_map))
         satisfied = (by_val != 0) and (x_val % by_val == 0)
         status = ConstraintStatus.SATISFIED if satisfied else ConstraintStatus.VIOLATED
         symbolic = constraint_to_str(constraint)
@@ -625,8 +677,8 @@ class SolverContext:
             lhs_value=x_val, rhs_value=by_val,
         )
 
-    @staticmethod
     def _analyze_equality(
+        self,
         index: int,
         constraint: dict,
         tag: str,
@@ -634,8 +686,8 @@ class SolverContext:
         concrete_map: dict[str, z3.ArithRef],
     ) -> ConstraintAnalysis:
         """Analyze an Eq or Ne constraint (binary)."""
-        lhs_val = z3.simplify(resolve_expr(payload[0], concrete_map)).as_long()
-        rhs_val = z3.simplify(resolve_expr(payload[1], concrete_map)).as_long()
+        lhs_val = self._eval_concrete(resolve_expr(payload[0], concrete_map))
+        rhs_val = self._eval_concrete(resolve_expr(payload[1], concrete_map))
         if tag == "Eq":
             satisfied = lhs_val == rhs_val
             desc = f"Eq: {lhs_val} == {rhs_val}"
