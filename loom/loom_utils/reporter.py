@@ -1,36 +1,13 @@
-"""Console reporting utilities for SMT solver results.
-
-Responsible for formatting and printing the per-scope / per-stage / per-queue
-timing breakdown after optimal symbol values have been determined.
+"""Console reporting utilities for Loom solver results.
 """
 
+from __future__ import annotations
 import sys
-from typing import TextIO
+from typing import TextIO, Optional
 
-import z3
-
-from ..core.expr_resolver import resolve_expr, resolve_constraint
-
-
-def eval_expr(expr_dict: dict, concrete_map: dict[str, z3.ArithRef]) -> int:
-    """Evaluate a JSON Expr to a concrete integer given a concrete symbol map."""
-    # Since concrete_map contains only IntVal constants, resolve_expr returns 
-    # an expression where all symbols are replaced by constants. 
-    # simplify() should then reduce it to a single IntNumRef.
-    res = resolve_expr(expr_dict, concrete_map)
-    simplified = z3.simplify(res)
-    
-    if z3.is_int_value(simplified):
-        return simplified.as_long()
-        
-    # Fallback for extremely complex expressions or non-linear division that 
-    # simplify() might not fully reduce.
-    s = z3.Solver()
-    s.add(z3.Int("tmp_eval") == simplified)
-    if s.check() == z3.sat:
-        return s.model().eval(simplified).as_long()
-        
-    raise RuntimeError(f"Could not evaluate expression to a constant: {expr_dict}")
+from .ast_core import Node, Expr, Constraint, Const, Sym, Add, Mul, Div, Mod, Min, Max, IfElse, Eq, Ne, Ge, Gt, Le, Lt, And, Or, Divisible, Top
+from .ast_parser import parse_expr, parse_constraint
+from .constraint_analysis import ConstraintAnalysis, ConstraintStatus, SymbolStepInfo
 
 
 def print_breakdown(
@@ -42,18 +19,6 @@ def print_breakdown(
     file: TextIO = None,
 ) -> None:
     """Write a hierarchical timing breakdown for the given symbol assignments.
-
-    Substitutes concrete integer values for all symbols, then writes every
-    scope → stage → queue resolved_time, scope totals, and the final T_total
-    derivation to *file* (defaults to sys.stdout).
-
-    Args:
-        variant:     A single variant dict from the staged ETG JSON.
-        assignments: Mapping of symbol name → concrete integer value.
-        min_val:     The optimal T_total value.
-        index:       0-based index of this variant in the full list.
-        total:       Total number of variants.
-        file:        Output stream. Defaults to sys.stdout.
     """
     if file is None:
         file = sys.stdout
@@ -65,16 +30,13 @@ def print_breakdown(
     p(f"Variant [{index}/{total - 1}]: {variant_name}")
     p(f"Optimal T_total: {min_val:,} cycles")
     for sym, val in sorted(assignments.items()):
-        p(f"  {sym} = {val}")
+        if not sym.startswith("__"):
+            p(f"  {sym} = {val}")
     p()
 
-    concrete_map: dict[str, z3.ArithRef] = {
-        name: z3.IntVal(val) for name, val in assignments.items()
-    }
-
     iter_num = variant["constraint_scope"]["metadata"]["iter_num"]
-    seq_val = eval_expr(iter_num["seq_iter"], concrete_map)
-    temp_vals = [eval_expr(t, concrete_map) for t in iter_num["temp_iter"]]
+    seq_val = parse_expr(iter_num["seq_iter"]).eval(assignments)
+    temp_vals = [parse_expr(t).eval(assignments) for t in iter_num["temp_iter"]]
     temp_product = 1
     for v in temp_vals:
         temp_product *= v
@@ -105,10 +67,10 @@ def print_breakdown(
                 matched_idx = None
                 matched_cost = None
                 for si, scenario in enumerate(scenarios):
-                    cond_z3 = resolve_constraint(scenario["constraints"], concrete_map)
-                    if z3.is_true(z3.simplify(cond_z3)):
+                    cond_ast = parse_constraint(scenario["constraints"])
+                    if cond_ast.eval(assignments):
                         matched_idx = si
-                        matched_cost = eval_expr(scenario["time_cost"], concrete_map)
+                        matched_cost = parse_expr(scenario["time_cost"]).eval(assignments)
                         break
 
                 if matched_cost is not None:
@@ -134,8 +96,10 @@ def print_breakdown(
         p()
         scope_totals.append((scope_name, scope_total))
 
-    t_comp = next(v for n, v in scope_totals if "compute" in n.lower())
-    t_mem  = next(v for n, v in scope_totals if "memory"  in n.lower())
+    comp_scopes = [v for n, v in scope_totals if "compute" in n.lower()]
+    mem_scopes = [v for n, v in scope_totals if "memory" in n.lower()]
+    t_comp = comp_scopes[0] if comp_scopes else 0
+    t_mem = mem_scopes[0] if mem_scopes else 0
     t_stage = max(t_comp, t_mem)
 
     p(f"  T_comp  = {t_comp:>10,} cycles")
@@ -145,64 +109,13 @@ def print_breakdown(
     p()
 
 
-def print_unsat_core(
-    variant_name: str,
-    unsat_core_info: list[tuple[str, str]],
-    context: str = "",
-    file: TextIO = None,
-) -> None:
-    """Write UNSAT core details for a variant.
-
-    Args:
-        variant_name: Name of the variant.
-        unsat_core_info: List of (constraint_name, constraint_expr_str) tuples
-                         as produced by ``SolverContext.last_unsat_core_info``.
-        context: Additional context string (e.g., "Optimum bound", "Infeasible").
-        file: Output stream. Defaults to sys.stdout.
-    """
-    if file is None:
-        file = sys.stdout
-
-    def p(*args, **kwargs):
-        print(*args, **kwargs, file=file)
-
-    p(f"[UNSAT Core] {variant_name}" + (f" ({context})" if context else ""))
-    for name, expr in unsat_core_info:
-        p(f"  {name}: {expr}")
-    p()
-
-
-def _print_constraint_line(p, analysis) -> None:
-    """Format one ConstraintAnalysis line: symbolic → concrete if available."""
-    from ..core.solver_context import ConstraintAnalysis
-    a: ConstraintAnalysis = analysis
-    prefix = f"    hard[{a.index}]:"
-    if a.symbolic:
-        # Symbolic form on one line, concrete result indented below
-        p(f"{prefix} {a.symbolic}")
-        p(f"    {' ' * len(f'hard[{a.index}]:')}  → {a.description}")
-    else:
-        p(f"{prefix} {a.description}")
-
-
 def print_active_constraints(
     variant_name: str,
-    analyses: list,
+    analyses: list[ConstraintAnalysis],
     file: TextIO = None,
 ) -> None:
     """Print constraint analysis at the optimum.
-
-    Groups results by status: TIGHT and DISCRETE_WALL shown in detail,
-    binary constraints summarized as counts.
-
-    Args:
-        variant_name: Name of the variant.
-        analyses: List of ``ConstraintAnalysis`` objects as produced by
-                  ``SolverContext.find_active_constraints()``.
-        file: Output stream. Defaults to sys.stdout.
     """
-    from ..core.solver_context import ConstraintStatus
-
     if file is None:
         file = sys.stdout
 
@@ -257,25 +170,40 @@ def print_active_constraints(
     p()
 
 
+def _print_constraint_line(p, a: ConstraintAnalysis) -> None:
+    """Format one ConstraintAnalysis line: symbolic → concrete if available."""
+    prefix = f"    hard[{a.index}]:"
+    if a.symbolic:
+        # Symbolic form on one line, concrete result indented below
+        p(f"{prefix} {a.symbolic}")
+        p(f"    {' ' * len(f'hard[{a.index}]:')}  → {a.description}")
+    else:
+        p(f"{prefix} {a.description}")
+
+
+def print_unsat_core(
+    variant_name: str,
+    unsat_core_info: list[tuple[str, str]],
+    context: str = "",
+    file: TextIO = None,
+) -> None:
+    """Write UNSAT core details for a variant."""
+    if file is None: file = sys.stdout
+    def p(*args, **kwargs): print(*args, **kwargs, file=file)
+    p(f"[UNSAT Core] {variant_name}" + (f" ({context})" if context else ""))
+    for name, expr in unsat_core_info:
+        p(f"  {name}: {expr}")
+    p()
+
+
 def print_mus(
     variant_name: str,
     mus: list[tuple[int, str, str]],
     file: TextIO = None,
 ) -> None:
-    """Print Minimum Unsatisfiable Subset for an UNSAT variant.
-
-    Args:
-        variant_name: Name of the variant.
-        mus: List of (index, label, z3_expr_str) tuples as produced by
-             ``SolverContext.find_mus()``.
-        file: Output stream. Defaults to sys.stdout.
-    """
-    if file is None:
-        file = sys.stdout
-
-    def p(*args, **kwargs):
-        print(*args, **kwargs, file=file)
-
+    """Print Minimum Unsatisfiable Subset for an UNSAT variant."""
+    if file is None: file = sys.stdout
+    def p(*args, **kwargs): print(*args, **kwargs, file=file)
     p(f"[MUS] {variant_name}  ({len(mus)} constraints)")
     for idx, label, expr_str in mus:
         p(f"  [{idx}] {label}: {expr_str}")
@@ -290,24 +218,9 @@ def print_result_summary(
     total: int,
     file: TextIO = None,
 ) -> None:
-    """Print compact result: optimal value and block size assignments.
-
-    Used in non-debug mode as a lightweight alternative to ``print_breakdown()``.
-
-    Args:
-        variant_name: Name of the variant.
-        assignments: Mapping of symbol name → concrete integer value.
-        min_val:     The optimal T_total value.
-        index:       0-based index of this variant in the full list.
-        total:       Total number of variants.
-        file:        Output stream. Defaults to sys.stdout.
-    """
-    if file is None:
-        file = sys.stdout
-
-    def p(*args, **kwargs):
-        print(*args, **kwargs, file=file)
-
+    """Print compact result summary."""
+    if file is None: file = sys.stdout
+    def p(*args, **kwargs): print(*args, **kwargs, file=file)
     p(f"Variant [{index}/{total - 1}]: {variant_name}")
     p(f"  T_total: {min_val:,} cycles")
     for sym, val in sorted(assignments.items()):

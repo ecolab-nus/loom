@@ -1,3 +1,6 @@
+#vscode stuff
+.vscode/
+
 # Python packaging artifacts
 *.egg-info/
 __pycache__/
