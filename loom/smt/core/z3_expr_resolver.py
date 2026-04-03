@@ -9,7 +9,7 @@ from __future__ import annotations
 import z3
 from typing import Union, Tuple
 
-from ...loom_utils.ast_core import (
+from ...loom_utils.ast import (
     Node, Expr, Constraint, Const, Sym, Add, Mul, Div, Mod, Min, Max, IfElse,
     Comparison, Eq, Ne, Ge, Gt, Le, Lt, And, Or, Divisible, Top
 )

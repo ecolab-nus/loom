@@ -4,13 +4,12 @@
 from __future__ import annotations
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Optional
+from typing import Optional, Union
 
-from .ast_core import Node, Expr, Constraint, Const, Sym, Add, Mul, Div, Mod, Min, Max, IfElse, Comparison, Eq, Ne, Ge, Gt, Le, Lt, And, Or, Divisible, Top
+from ..ast import Node, Constraint, Sym, Const, Add, Mul, Div, Mod, Min, Max, IfElse, Comparison, Eq, Ne, Ge, Gt, Le, Lt, And, Or, Divisible, Top
 
 
 class ConstraintStatus(Enum):
-    """Classification of a constraint at the optimal assignment."""
     TIGHT = "tight"
     DISCRETE_WALL = "wall"
     ACTIVE_SLACK = "slack"
@@ -20,8 +19,6 @@ class ConstraintStatus(Enum):
 
 @dataclass
 class SymbolStepInfo:
-    """Per-symbol headroom analysis for an inequality constraint.
-    """
     symbol: str
     current_value: int
     next_value: Optional[int]
@@ -31,7 +28,6 @@ class SymbolStepInfo:
 
 @dataclass
 class ConstraintAnalysis:
-    """Full analysis result for a single hard constraint."""
     index: int
     constraint_ast: Constraint
     tag: str
@@ -50,8 +46,7 @@ def analyze_constraints(
     assignments: dict[str, int],
     domains: dict[str, list[int]],
 ) -> list[ConstraintAnalysis]:
-    """Analyze all hard constraints at the given assignments.
-    """
+    """Analyze all hard constraints at the given assignments."""
     results: list[ConstraintAnalysis] = []
     sorted_domains = {name: sorted(vals) for name, vals in domains.items()}
     
@@ -67,7 +62,6 @@ def _analyze_single_constraint(
     assignments: dict[str, int],
     sorted_domains: dict[str, list[int]],
 ) -> ConstraintAnalysis:
-    """Analyze one constraint using its internal evaluation logic."""
     if isinstance(constraint, (Ge, Gt, Le, Lt)):
         return _analyze_inequality(index, constraint, assignments, sorted_domains)
     
@@ -93,7 +87,6 @@ def _analyze_single_constraint(
             sub_analyses=sub,
         )
 
-    # Fallback/unknown
     return ConstraintAnalysis(
         index=index, constraint_ast=constraint, tag=type(constraint).__name__,
         status=ConstraintStatus.SATISFIED,
@@ -107,7 +100,6 @@ def _analyze_inequality(
     assignments: dict[str, int],
     sorted_domains: dict[str, list[int]],
 ) -> ConstraintAnalysis:
-    """Analyze a Ge/Le/Gt/Lt constraint with per-symbol headroom."""
     lhs_val = constraint.left.eval(assignments)
     rhs_val = constraint.right.eval(assignments)
     
@@ -117,7 +109,6 @@ def _analyze_inequality(
     else:
         slack = lhs_val - rhs_val
         
-    # Per-symbol step analysis
     symbols = _collect_symbols(constraint)
     symbol_steps: list[SymbolStepInfo] = []
     for sym_name in sorted(symbols):
@@ -147,7 +138,7 @@ def _analyze_inequality(
             if tag == "Le": would_violate = new_lhs > new_rhs
             elif tag == "Lt": would_violate = new_lhs >= new_rhs
             elif tag == "Ge": would_violate = new_lhs < new_rhs
-            else: would_violate = new_lhs <= new_rhs # Gt
+            else: would_violate = new_lhs <= new_rhs
             
         symbol_steps.append(SymbolStepInfo(
             symbol=sym_name, current_value=curr_val,
@@ -155,7 +146,6 @@ def _analyze_inequality(
             would_violate=would_violate,
         ))
 
-    # Classify status
     steppable = [s for s in symbol_steps if s.next_value is not None]
     if slack == 0:
         status = ConstraintStatus.TIGHT
@@ -224,7 +214,6 @@ def _collect_symbols(node: Node) -> set[str]:
         for o in node.operands:
             symbols |= _collect_symbols(o)
     elif isinstance(node, (Mul, Div, Mod, Comparison, Divisible)):
-        # Mul, Div, Mod, Comparison have left/right (or similar children)
         if hasattr(node, "left"): symbols |= _collect_symbols(node.left)
         if hasattr(node, "right"): symbols |= _collect_symbols(node.right)
         if hasattr(node, "x"): symbols |= _collect_symbols(node.x)

@@ -1,23 +1,13 @@
 """Utility for invoking the MLAR Rust evaluator binary to fill schedule scenarios.
-
-The evaluator binary accepts a Schedule JSON on stdin and returns the same
-Schedule JSON with ``scenarios`` populated on every node (Func, Sequential,
-Parallel) on stdout.
-
-TODO: Replace subprocess-based invocation with a native Python extension built
-      via pyo3 (https://pyo3.rs). The pyo3 package will expose the evaluator
-      logic directly as a Python callable, eliminating the need for a compiled
-      binary on PATH and the subprocess round-trip.
 """
 
 from __future__ import annotations
 
 import json
+import argparse
 from pathlib import Path
 
-from .etg_resolver import resolve_etg_variants, validate_scenarios
-from .evaluator_core import evaluate_schedule, resolve_schedule
-from .json_formatter import smart_json_dumps
+from .core import evaluate_schedule, resolve_schedule
 
 
 def evaluate_schedule_file(
@@ -39,9 +29,7 @@ def evaluate_schedule_file(
     return result
 
 
-def _main() -> None:
-    import argparse
-
+def main() -> None:
     parser = argparse.ArgumentParser(
         description="Evaluate an MLAR Schedule JSON using the Rust evaluator binary.",
     )
@@ -71,4 +59,4 @@ def _main() -> None:
 
 
 if __name__ == "__main__":
-    _main()
+    main()

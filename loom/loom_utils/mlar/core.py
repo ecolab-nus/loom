@@ -6,19 +6,12 @@ import shutil
 import subprocess
 from pathlib import Path
 
-from .schedule_utils import contains_sequential as _contains_sequential
+from .utils import contains_sequential as _contains_sequential
 
-_REPO_ROOT = Path(__file__).resolve().parents[2]
+_REPO_ROOT = Path(__file__).resolve().parents[3]
 
 
 def _find_default_evaluator() -> Path | None:
-    """Locate the eval_system binary using a cascading search.
-
-    Search order:
-    1. LOOM_EVAL_SYSTEM environment variable (explicit override)
-    2. $REPO_ROOT/third_party/loom-mlar/tests/2d_mesh/bin/eval_system (canonical build output)
-    3. 'eval_system' on $PATH (system-installed)
-    """
     env_path = os.environ.get("LOOM_EVAL_SYSTEM")
     if env_path:
         p = Path(env_path)
@@ -56,7 +49,6 @@ def evaluate_schedule(
     result = subprocess.run(
         [str(binary)],
         input=json.dumps(schedule),
-        # capture_output=True,
         stdout=subprocess.PIPE,
         stderr=None,
         text=True,

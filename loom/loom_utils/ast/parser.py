@@ -2,10 +2,10 @@
 """
 
 from __future__ import annotations
-from typing import Any, Union
+from typing import Any
 
-from .ast_core import (
-    Node, Expr, Constraint, Const, Sym, Add, Mul, Div, Mod, Min, Max, IfElse,
+from .core import (
+    Expr, Constraint, Const, Sym, Add, Mul, Div, Mod, Min, Max, IfElse,
     Eq, Ne, Ge, Gt, Le, Lt, And, Or, Divisible, Top
 )
 
@@ -27,7 +27,6 @@ def parse_expr(expr: Any) -> Expr:
         return Sym(payload)
     
     if tag in ("Add", "Mul", "Div", "Mod", "Min", "Max"):
-        # UnaryOps not implemented in ast_core yet, handling as needed
         if tag == "Add":
             return Add([parse_expr(o) for o in payload])
         if tag == "Mul":

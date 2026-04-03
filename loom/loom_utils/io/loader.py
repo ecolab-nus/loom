@@ -10,7 +10,6 @@ def load_variants(input_path: Union[str, Path]) -> list[dict]:
     with open(input_path, "r", encoding="utf-8") as f:
         data = json.load(f)
     
-    # Handle both top-level list and wrapped dictionary
     if isinstance(data, list):
         return data
     if isinstance(data, dict) and "variants" in data:

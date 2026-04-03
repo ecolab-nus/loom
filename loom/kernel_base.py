@@ -227,7 +227,7 @@ class LoomKernel:
                     parser.error(
                         f"block_sizes['{sym}']: lb ({bounds['lb']}) must be <= ub ({bounds['ub']})."
                     )
-            from loom.loom_utils.smt_utils import parse_user_block_sizes  # noqa: PLC0415
+            from loom.loom_utils.modeling import parse_user_block_sizes  # noqa: PLC0415
             symbol_domains = parse_user_block_sizes(block_sizes)
 
         setup_logging(args.debug)

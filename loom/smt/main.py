@@ -7,17 +7,15 @@ from concurrent.futures import ProcessPoolExecutor, as_completed
 from pathlib import Path
 from typing import Any, Optional
 
-from ..loom_utils.json_loader import load_variants
-from ..loom_utils.smt_utils import get_variant_name, derive_domains_from_etg
-from ..loom_utils.reporter import (
+from ..loom_utils.io import load_variants
+from ..loom_utils.modeling import (
+    get_variant_name, derive_domains_from_etg,
     print_breakdown, print_unsat_core,
     print_active_constraints, print_mus, print_result_summary,
 )
 from .core.solver_context import SolverContext
-from ..loom_utils.pipeline_agg import compute_total_time_ast
-from ..loom_utils.ast_parser import parse_constraint
-from ..loom_utils.ast_transforms import ASTTransformer
-from ..loom_utils.constraint_analysis import analyze_constraints
+from ..loom_utils.modeling import compute_total_time_ast, analyze_constraints
+from ..loom_utils.ast import parse_constraint, ASTTransformer
 
 
 def solve_variant(

@@ -7,7 +7,7 @@ from typing import Optional, Union, Tuple
 from itertools import product as iter_product
 
 from .z3_expr_resolver import resolve_ast
-from ...loom_utils.ast_core import Node, Expr, Constraint, Sym
+from ...loom_utils.ast import Node, Expr, Constraint, Sym
 
 class SolverContext:
     """Holds the Z3 solver, symbol table, and all accumulated constraints.

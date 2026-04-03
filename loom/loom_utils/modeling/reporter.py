@@ -3,11 +3,10 @@
 
 from __future__ import annotations
 import sys
-from typing import TextIO, Optional
+from typing import TextIO
 
-from .ast_core import Node, Expr, Constraint, Const, Sym, Add, Mul, Div, Mod, Min, Max, IfElse, Eq, Ne, Ge, Gt, Le, Lt, And, Or, Divisible, Top
-from .ast_parser import parse_expr, parse_constraint
-from .constraint_analysis import ConstraintAnalysis, ConstraintStatus, SymbolStepInfo
+from ..ast import parse_expr, parse_constraint
+from .analysis import ConstraintAnalysis, ConstraintStatus
 
 
 def print_breakdown(
@@ -18,8 +17,7 @@ def print_breakdown(
     total: int,
     file: TextIO = None,
 ) -> None:
-    """Write a hierarchical timing breakdown for the given symbol assignments.
-    """
+    """Write a hierarchical timing breakdown for the given symbol assignments."""
     if file is None:
         file = sys.stdout
 
@@ -54,8 +52,7 @@ def print_breakdown(
 
         scope_total = 0
         for stage in scope["stages"]:
-            stage_id = stage.get("stage_id", "?")
-            p(f"    Stage {stage_id}:")
+            p(f"    Stage {stage.get('stage_id', '?')}:")
 
             parallel = stage["Parallel"]
             stage_max_cost = 0
@@ -114,8 +111,7 @@ def print_active_constraints(
     analyses: list[ConstraintAnalysis],
     file: TextIO = None,
 ) -> None:
-    """Print constraint analysis at the optimum.
-    """
+    """Print constraint analysis at the optimum."""
     if file is None:
         file = sys.stdout
 
@@ -132,13 +128,11 @@ def print_active_constraints(
 
     if violated:
         p("  VIOLATED (should not happen at feasible optimum):")
-        for a in violated:
-            _print_constraint_line(p, a)
+        for a in violated: _print_constraint_line(p, a)
 
     if tight:
         p("  TIGHT constraints (slack=0):")
-        for a in tight:
-            _print_constraint_line(p, a)
+        for a in tight: _print_constraint_line(p, a)
 
     if walls:
         p("  DISCRETE WALLS (next step would violate):")
@@ -148,33 +142,23 @@ def print_active_constraints(
                 if s.next_value is not None and s.would_violate:
                     p(f"      {s.symbol}: {s.current_value} -> {s.next_value}"
                       f"  would cost +{s.step_cost} (VIOLATES)")
-            for sub in a.sub_analyses:
-                if sub.status == ConstraintStatus.DISCRETE_WALL:
-                    p(f"      sub: {sub.description}")
 
     if slacked:
         p("  Inequality constraints with slack:")
-        for a in slacked:
-            _print_constraint_line(p, a)
+        for a in slacked: _print_constraint_line(p, a)
 
-    # Summarize binary constraints
     sat_tags: dict[str, int] = {}
     for a in satisfied:
         sat_tags[a.tag] = sat_tags.get(a.tag, 0) + 1
     if sat_tags:
         parts = [f"{count} {tag}" for tag, count in sorted(sat_tags.items())]
         p(f"  Other satisfied: {', '.join(parts)}")
-
-    if not any([tight, walls, slacked, satisfied, violated]):
-        p("  (no constraints)")
     p()
 
 
 def _print_constraint_line(p, a: ConstraintAnalysis) -> None:
-    """Format one ConstraintAnalysis line: symbolic → concrete if available."""
     prefix = f"    hard[{a.index}]:"
     if a.symbolic:
-        # Symbolic form on one line, concrete result indented below
         p(f"{prefix} {a.symbolic}")
         p(f"    {' ' * len(f'hard[{a.index}]:')}  → {a.description}")
     else:
@@ -187,7 +171,6 @@ def print_unsat_core(
     context: str = "",
     file: TextIO = None,
 ) -> None:
-    """Write UNSAT core details for a variant."""
     if file is None: file = sys.stdout
     def p(*args, **kwargs): print(*args, **kwargs, file=file)
     p(f"[UNSAT Core] {variant_name}" + (f" ({context})" if context else ""))
@@ -201,7 +184,6 @@ def print_mus(
     mus: list[tuple[int, str, str]],
     file: TextIO = None,
 ) -> None:
-    """Print Minimum Unsatisfiable Subset for an UNSAT variant."""
     if file is None: file = sys.stdout
     def p(*args, **kwargs): print(*args, **kwargs, file=file)
     p(f"[MUS] {variant_name}  ({len(mus)} constraints)")
@@ -218,11 +200,11 @@ def print_result_summary(
     total: int,
     file: TextIO = None,
 ) -> None:
-    """Print compact result summary."""
     if file is None: file = sys.stdout
     def p(*args, **kwargs): print(*args, **kwargs, file=file)
     p(f"Variant [{index}/{total - 1}]: {variant_name}")
     p(f"  T_total: {min_val:,} cycles")
     for sym, val in sorted(assignments.items()):
-        p(f"  {sym} = {val}")
+        if not sym.startswith("__"):
+            p(f"  {sym} = {val}")
     p()

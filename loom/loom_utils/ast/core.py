@@ -1,7 +1,4 @@
-"""Pure Python AST for the Loom dataflow pipeline expressions and constraints.
-
-This module provides a solver-agnostic intermediate representation (IR) for
-mathematical expressions and boolean constraints defined in the ETG.
+"""Pure Python AST nodes for Loom dataflow pipeline expressions and constraints.
 """
 
 from __future__ import annotations
@@ -89,7 +86,6 @@ class Mul(BinaryOp):
 @dataclass
 class Div(BinaryOp):
     def eval(self, env: dict[str, int]) -> int:
-        # Replicates Z3 integer division (floor division)
         return self.left.eval(env) // self.right.eval(env)
     def __str__(self) -> str:
         return f"({self.left} / {self.right})"

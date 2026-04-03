@@ -125,7 +125,8 @@ def run_step_2_etg_resolution(
     logging.info("STEP 2: ETG RESOLUTION (MLAR evaluator)")
     logging.info("=" * 72)
 
-    from loom.loom_utils.mlar_evaluator import resolve_etg_variants, smart_json_dumps  # noqa: PLC0415
+    from loom.loom_utils.mlar import resolve_etg_variants  # noqa: PLC0415
+    from loom.loom_utils.io import smart_json_dumps  # noqa: PLC0415
 
     resolved_etg = constraints_dir / "p02_resolved_etg.json"
     logging.info(f"  Output : {resolved_etg}")
