@@ -84,8 +84,14 @@ class SolverContext:
     def find_optimum(
         self,
         objective_ast: Expr,
-    ) -> Optional[tuple[int, dict[str, int]]]:
-        """Minimize the objective and return (min_val, assignments) or None."""
+    ) -> tuple[str, Optional[int], Optional[dict[str, int]]]:
+        """Minimize the objective and return (status, min_val, assignments).
+
+        status is one of: "OPTIMAL", "INFEASIBLE", "UNKNOWN", "MODEL_INVALID".
+        min_val and assignments are None when status != "OPTIMAL".
+        """
+        from cpmpy.solvers.solver_interface import ExitStatus  # noqa: PLC0415
+
         resolver = ExprResolver(self.symbol_map)
         cp_obj = resolver.resolve(objective_ast)
 
@@ -94,13 +100,21 @@ class SolverContext:
             self.model += aux
 
         self.model.minimize(cp_obj)
-        solved = self.model.solve(solver="ortools")
+        try:
+            self.model.solve(solver="ortools")
+        except Exception:
+            return "MODEL_INVALID", None, None
 
-        if not solved:
-            return None
-
-        assignments = {
-            name: int(var.value()) for name, var in self.symbol_map.items()
-        }
-        obj_val = int(self.model.objective_value())
-        return obj_val, assignments
+        exit_status = self.model.status().exitstatus
+        if exit_status == ExitStatus.OPTIMAL:
+            assignments = {
+                name: int(var.value()) for name, var in self.symbol_map.items()
+            }
+            obj_val = int(self.model.objective_value())
+            return "OPTIMAL", obj_val, assignments
+        elif exit_status == ExitStatus.UNSATISFIABLE:
+            return "INFEASIBLE", None, None
+        elif exit_status == ExitStatus.UNKNOWN:
+            return "UNKNOWN", None, None
+        else:
+            return "MODEL_INVALID", None, None

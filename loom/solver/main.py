@@ -37,13 +37,13 @@ def solve_variant(
     # Add constraints and solve
     ctx.add_hard_constraints(hard_constraints_ast)
     ctx.add_iter_num_constraints(variant["constraint_scope"]["metadata"]["iter_num"])
-    result = ctx.find_optimum(t_total_ast)
-    min_val, assignments = result if result is not None else (None, None)
+    status, min_val, assignments = ctx.find_optimum(t_total_ast)
 
     return {
         "variant": variant,
         "index": index,
         "total": total,
+        "status": status,
         "min_val": min_val,
         "assignments": assignments,
     }
@@ -55,8 +55,8 @@ def _write_detailed_log(
     with open(output_path, "w", encoding="utf-8") as log:
         for r in results:
             vname = get_variant_name(r["variant"], r["index"])
-            if r["min_val"] is None:
-                print(f"Variant [{r['index']}/{total - 1}]: {vname}  UNSAT\n", file=log)
+            if r["status"] != "OPTIMAL":
+                print(f"Variant [{r['index']}/{total - 1}]: {vname}  {r['status']}\n", file=log)
             else:
                 print_result_summary(vname, r["assignments"], r["min_val"], r["index"], total, file=log)
                 print("-" * 72, file=log)
@@ -68,6 +68,7 @@ def run(
     output_path: Path | str | None = None,
     symbol_domains: dict[str, list[int]] | None = None,
     optimal_only: bool = False,
+    debug: bool = False,
 ) -> dict[str, dict[str, int] | None]:
     variants = load_variants(input_path)
     total = len(variants)
@@ -77,38 +78,62 @@ def run(
     print(f"Solving {total} variants with {njobs} process(es) [CPMpy/CP-SAT]...")
 
     results: list[dict] = [None] * total
+    completed = 0
     with ProcessPoolExecutor(max_workers=njobs) as pool:
         futures = {
             pool.submit(solve_variant, v, i, total, domains): i
             for i, v in enumerate(variants)
         }
-        completed = 0
         for f in as_completed(futures):
             res = f.result()
             results[res["index"]] = res
             completed += 1
             vname = get_variant_name(res["variant"], res["index"])
-            if res["min_val"] is None:
-                print(f"[{completed:3d}/{total}] {vname}  UNSAT")
+            status = res["status"]
+            if status == "OPTIMAL":
+                print(f"[{completed:3d}/{total}] {vname}  T={res['min_val']:,} cycles  OPTIMAL")
             else:
-                print(f"[{completed:3d}/{total}] {vname}  T={res['min_val']:,} cycles")
+                print(f"[{completed:3d}/{total}] {vname}  {status}")
+
+    # Determine global best among OPTIMAL candidates
+    feasible = [r for r in results if r["status"] == "OPTIMAL"]
+    best = min(feasible, key=lambda r: r["min_val"]) if feasible else None
+
+    # Apply optimal_only filtering: mark non-best OPTIMAL candidates as omitted
+    omitted_by_optimal_only: set[int] = set()
+    if optimal_only and best is not None:
+        for r in results:
+            if r["status"] == "OPTIMAL" and r["min_val"] > best["min_val"]:
+                omitted_by_optimal_only.add(r["index"])
+
+    block_sizes = {
+        get_variant_name(r["variant"], r["index"]): (
+            dict(r["assignments"])
+            if r["status"] == "OPTIMAL" and r["index"] not in omitted_by_optimal_only
+            else None
+        )
+        for r in results
+    }
+
+    # Overall omit summary (debug-only, index order)
+    if debug:
+        omit_lines = []
+        for r in results:
+            vname = get_variant_name(r["variant"], r["index"])
+            idx = r["index"] + 1
+            if r["status"] != "OPTIMAL":
+                omit_lines.append(f"  [{idx:3d}/{total}] {vname}  OMITTED: no feasible solution ({r['status']})")
+            elif r["index"] in omitted_by_optimal_only:
+                omit_lines.append(f"  [{idx:3d}/{total}] {vname}  OMITTED: non global optimal (T={r['min_val']:,} cycles)")
+        if omit_lines:
+            print("\nOMIT SUMMARY:")
+            for line in omit_lines:
+                print(line)
 
     if output_path:
         _write_detailed_log(results, output_path, total)
 
-    block_sizes = {
-        get_variant_name(r["variant"], r["index"]): (
-            dict(r["assignments"]) if r["min_val"] is not None else None
-        )
-        for r in results
-    }
-    feasible = [r for r in results if r["min_val"] is not None]
-    if feasible:
-        best = min(feasible, key=lambda r: r["min_val"])
-        if optimal_only:
-            for r in results:
-                if r["min_val"] is not None and r["min_val"] > best["min_val"]:
-                    block_sizes[get_variant_name(r["variant"], r["index"])] = None
+    if best:
         print("\nGLOBAL BEST")
         print_breakdown(best["variant"], best["assignments"], best["min_val"], best["index"], total)
     return block_sizes

@@ -166,6 +166,7 @@ def run_step_3_solve(
             output_path=solver_log,
             symbol_domains=symbol_domains,
             optimal_only=optimal_only,
+            debug=debug,
         )
 
     feasible_count = sum(1 for v in block_sizes.values() if v is not None)
@@ -318,4 +319,5 @@ def run_pipeline(
     run_step_4_materialization(explored_mlir, broadcast, ir_dir)
     del explored_mlir
 
-    print_timing_summary()
+    if debug:
+        print_timing_summary()
