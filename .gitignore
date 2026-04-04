@@ -11,3 +11,6 @@ build/
 
 # Rust build artifacts
 third_party/loom-mlar/bin/
+
+# Whole pipeline artifacts(constraints)
+test/*/constraints/
