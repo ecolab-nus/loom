@@ -130,7 +130,7 @@ class LoomKernel:
         parser = argparse.ArgumentParser(
             description=(
                 f"Loom pipeline for {name}: "
-                "Helion frontend → Explore → ETG resolve → SMT solve → Materialize."
+                "Helion frontend → Explore → ETG resolve → CP-SAT solve → Materialize."
             )
         )
         parser.add_argument(
@@ -159,13 +159,7 @@ class LoomKernel:
             "--debug",
             action="store_true",
             default=False,
-            help="Enable detailed SMT analysis and write intermediate IRs/logs.",
-        )
-        parser.add_argument(
-            "--force-enumerate",
-            action="store_true",
-            default=False,
-            help="Skip Z3 binary search and brute-force enumerate all domain combinations.",
+            help="Enable detailed analysis and write intermediate IRs/logs.",
         )
         parser.add_argument(
             "--optimal-only",
@@ -238,6 +232,5 @@ class LoomKernel:
             njobs=args.njobs,
             debug=args.debug,
             symbol_domains=symbol_domains,
-            force_enumerate=args.force_enumerate,
             optimal_only=args.optimal_only,
         )

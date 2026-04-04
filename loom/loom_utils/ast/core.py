@@ -128,6 +128,27 @@ class IfElse(Expr):
         return f"if({self.cond}, {self.then_expr}, {self.else_expr})"
 
 
+class Switch(Expr):
+    """Multi-branch conditional with mutually-exclusive cases.
+
+    Each case is a (Constraint, Expr) pair. Evaluates to the cost of the
+    first matching case, or *default* if none match.
+    """
+    def __init__(self, cases: list[tuple[Constraint, Expr]], default: Expr):
+        self.cases = cases
+        self.default = default
+
+    def eval(self, env: dict[str, int]) -> int:
+        for cond, expr in self.cases:
+            if cond.eval(env):
+                return expr.eval(env)
+        return self.default.eval(env)
+
+    def __str__(self) -> str:
+        branches = ", ".join(f"{c} => {e}" for c, e in self.cases)
+        return f"switch({branches}, default={self.default})"
+
+
 # ---------------------------------------------------------------------------
 # Constraint Nodes
 # ---------------------------------------------------------------------------

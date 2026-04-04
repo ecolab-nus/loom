@@ -3,7 +3,7 @@
 
 from __future__ import annotations
 
-from ..ast import Expr, Const, Sym, Add, Mul, Max, IfElse, Eq, parse_expr, parse_constraint
+from ..ast import Expr, Const, Sym, Add, Mul, Max, IfElse, Switch, Eq, Top, parse_expr, parse_constraint
 
 # Large enough to never be chosen as the minimum.
 _INF = Const(2**31)
@@ -39,15 +39,24 @@ def compute_total_time_ast(
 def _fold_scenarios(
     scenarios: list[dict],
 ) -> Expr:
-    """Fold a scenarios list into a nested If-tree (right-fold)."""
+    """Fold a scenarios list into a Switch (or bare expression for single-case)."""
     assert scenarios, "scenarios list must be non-empty"
 
-    result = _INF
-    for scenario in reversed(scenarios):
+    # Single scenario with trivial condition → just the expression
+    if len(scenarios) == 1:
+        cond = parse_constraint(scenarios[0]["constraints"])
+        cost = parse_expr(scenarios[0]["time_cost"])
+        if isinstance(cond, Top):
+            return cost
+        return Switch(cases=[(cond, cost)], default=_INF)
+
+    # Multiple scenarios → flat Switch with mutually-exclusive cases
+    cases = []
+    for scenario in scenarios:
         cond = parse_constraint(scenario["constraints"])
         cost = parse_expr(scenario["time_cost"])
-        result = IfElse(cond, cost, result)
-    return result
+        cases.append((cond, cost))
+    return Switch(cases=cases, default=_INF)
 
 
 def _aggregate_scope(

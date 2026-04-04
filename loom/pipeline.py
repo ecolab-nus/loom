@@ -14,7 +14,7 @@ Pipeline stages
   0. Helion frontend   – call ``generate_mlir_fn()`` → raw MLIR text
   1. Exploration        – C++ passes via pybind11 (loom_pipeline)
   2. ETG resolution     – MLAR Rust evaluator (loom_utils)
-  3. SMT solver         – Z3-based block-size optimizer (loom.smt)
+  3. CP-SAT solver      – CPMpy/OR-Tools block-size optimizer (loom.solver)
   4. Materialization    – C++ passes via pybind11 (loom_pipeline)
 
 Output layout under <output_path>
@@ -24,7 +24,7 @@ Output layout under <output_path>
   IRs/p03_bufferized.mlir
   constraints/p01_exploration_etg.json
   constraints/p02_resolved_etg.json
-  constraints/smt_solver.log          (--debug only)
+  constraints/solver.log              (--debug only)
 """
 from __future__ import annotations
 
@@ -140,37 +140,30 @@ def run_step_2_etg_resolution(
     return resolved_variants
 
 
-def run_step_3_smt_solve(
+def run_step_3_solve(
     resolved_etg_path: Path,
     njobs: int,
     debug: bool,
     constraints_dir: Path,
-    force_enumerate: bool = False,
     symbol_domains: dict[str, list[int]] | None = None,
     optimal_only: bool = False,
 ) -> dict[str, Any]:
-    """Step 3: SMT solver (finds optimal block sizes)."""
+    """Step 3: CPMpy/CP-SAT solver (finds optimal block sizes)."""
     logging.info("")
     logging.info("=" * 72)
-    logging.info("STEP 3: SMT SOLVER")
+    logging.info("STEP 3: SOLVER (CPMpy/CP-SAT)")
     logging.info("=" * 72)
     logging.info(f"  ETG input  : {resolved_etg_path}")
 
-    from loom.smt import smt_run  # noqa: PLC0415
+    from loom.solver import cpmpy_run  # noqa: PLC0415
 
-    if smt_run is None:
-        logging.error("SMT solver not available (loom-dataflow not installed in editable mode).")
-        sys.exit(1)
+    solver_log = constraints_dir / "solver.log" if debug else None
 
-    solver_log = constraints_dir / "smt_solver.log" if debug else None
-
-    with pipeline_timer("Step 3: SMT Solver"):
-        block_sizes = smt_run(
+    with pipeline_timer("Step 3: Solver"):
+        block_sizes = cpmpy_run(
             input_path=resolved_etg_path,
             njobs=njobs,
             output_path=solver_log,
-            debug=debug,
-            force_enumerate=force_enumerate,
             symbol_domains=symbol_domains,
             optimal_only=optimal_only,
         )
@@ -268,7 +261,6 @@ def run_pipeline(
     njobs: int = 1,
     debug: bool = False,
     symbol_domains: dict[str, list[int]] | None = None,
-    force_enumerate: bool = False,
     optimal_only: bool = False,
 ) -> None:
     """Run the full Loom compilation pipeline.
@@ -284,14 +276,13 @@ def run_pipeline(
     hw_spec:
         Path to the hardware specification MLIR file.
     njobs:
-        Number of parallel workers for ETG resolution and SMT solving.
+        Number of parallel workers for ETG resolution and CP-SAT solving.
     debug:
-        Enable detailed SMT analysis and write intermediate IRs/logs.
+        Enable detailed analysis and write intermediate IRs/logs.
     symbol_domains:
         Optional per-symbol domain overrides mapping symbol name to a list
-        of allowed powers-of-2 values.  If provided, the SMT solver uses
-        these domains instead of the built-in defaults.  Steps 2 and 3
-        still run in all cases.
+        of allowed values.  If provided, the solver uses these domains
+        instead of the built-in defaults.  Steps 2 and 3 still run in all cases.
     optimal_only:
         Optional boolean to keep only the optimal candidates.
     """
@@ -313,10 +304,10 @@ def run_pipeline(
     # Step 2: ETG resolution
     run_step_2_etg_resolution(etg_json_text, njobs, constraints_dir)
 
-    # Step 3: SMT Solver
+    # Step 3: Solver
     resolved_etg_path = constraints_dir / "p02_resolved_etg.json"
-    broadcast = run_step_3_smt_solve(
-        resolved_etg_path, njobs, debug, constraints_dir, force_enumerate,
+    broadcast = run_step_3_solve(
+        resolved_etg_path, njobs, debug, constraints_dir,
         symbol_domains=symbol_domains,
         optimal_only=optimal_only,
     )
