@@ -7,7 +7,7 @@ from typing import Optional, Union
 import cpmpy as cp
 
 from .cpmpy_expr_resolver import ExprResolver
-from ...loom_utils.ast import Constraint, Expr
+from ...loom_utils.ast import Constraint, Expr, Div, parse_expr
 
 
 class SolverContext:
@@ -59,6 +59,27 @@ class SolverContext:
         # Add any auxiliary constraints generated during resolution
         for aux in resolver.aux_constraints:
             self.model += aux
+
+    def add_iter_num_constraints(self, iter_num: dict) -> None:
+        """Add divisibility and positivity constraints for each iter_num expression.
+
+        Each iter expression has the form C_0 / (C_1 * V) (parsed as Div(num, denom)).
+        We enforce:
+          - C_0 % (C_1 * V) == 0   (iteration count is an integer)
+          - C_1 * V <= C_0          (iteration count is at least 1)
+        """
+        raw_iters = [iter_num["seq_iter"]] + list(iter_num.get("temp_iter", []))
+        resolver = ExprResolver(self.symbol_map)
+
+        for raw in raw_iters:
+            node = parse_expr(raw)
+            if not isinstance(node, Div):
+                raise ValueError(f"Expected Div node in iter_num, got {type(node)}: {node}")
+
+            num_cp = resolver.resolve(node.left)
+            denom_cp = resolver.resolve(node.right)
+            self.model += num_cp % denom_cp == 0   # divisible
+            self.model += denom_cp <= num_cp        # positive (iter >= 1)
 
     def find_optimum(
         self,

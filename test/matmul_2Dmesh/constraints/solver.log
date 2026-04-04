@@ -153,9 +153,9 @@ Variant [18/47]: _matmul__d0i0_d1i1__f01__dim_x_n_n
 Variant [19/47]: _matmul__d0i0_d1i1__f01__dim_x_dim_y_n
   T_total: 65,936 cycles
   is_double_buffer = 1
-  tile_k = 256
-  tile_m = 256
-  tile_n = 256
+  tile_k = 64
+  tile_m = 512
+  tile_n = 512
 
 ------------------------------------------------------------------------
 Variant [20/47]: _matmul__d0i0_d1i1__f10__n_n_n
@@ -217,9 +217,9 @@ Variant [26/47]: _matmul__d1i0_d0i1__f01__dim_y_n_n
 Variant [27/47]: _matmul__d1i0_d0i1__f01__dim_y_dim_x_n
   T_total: 65,936 cycles
   is_double_buffer = 1
-  tile_k = 256
-  tile_m = 256
-  tile_n = 256
+  tile_k = 64
+  tile_m = 512
+  tile_n = 512
 
 ------------------------------------------------------------------------
 Variant [28/47]: _matmul__d1i0_d0i1__f10__n_n_n

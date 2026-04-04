@@ -36,6 +36,7 @@ def solve_variant(
 
     # Add constraints and solve
     ctx.add_hard_constraints(hard_constraints_ast)
+    ctx.add_iter_num_constraints(variant["constraint_scope"]["metadata"]["iter_num"])
     result = ctx.find_optimum(t_total_ast)
     min_val, assignments = result if result is not None else (None, None)
 
