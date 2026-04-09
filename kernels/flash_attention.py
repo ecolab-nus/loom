@@ -62,7 +62,7 @@ class FlashAttention(LoomKernel):
 
     kernel_name = "Flash Attention"
 
-    B: int = 32
+    B: int = 256
     L: int = 4096
     d: int = 128
 

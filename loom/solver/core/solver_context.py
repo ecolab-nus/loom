@@ -63,13 +63,30 @@ class SolverContext:
             self.model += aux
             self._tracked_constraints.append((f"hard_aux[{j}]", aux))
 
+    @staticmethod
+    def _flatten_div_chain(node: Div) -> tuple[Expr, list[Expr]]:
+        """Traverse the left-spine of nested Div nodes.
+
+        Returns (numerator, [d0, d1, ..., dN]) where numerator is the leftmost
+        non-Div leaf and the denominators are in left-to-right evaluation order:
+          Div(Div(Div(A, d0), d1), d2)  →  (A, [d0, d1, d2])
+        """
+        denoms: list[Expr] = []
+        current: Expr = node
+        while isinstance(current, Div):
+            denoms.append(current.right)
+            current = current.left
+        denoms.reverse()
+        return current, denoms
+
     def add_iter_num_constraints(self, iter_num: dict) -> None:
         """Add divisibility and positivity constraints for each iter_num expression.
 
-        Each iter expression has the form C_0 / (C_1 * V) (parsed as Div(num, denom)).
-        We enforce:
-          - C_0 % (C_1 * V) == 0   (iteration count is an integer)
-          - C_1 * V <= C_0          (iteration count is at least 1)
+        Flattens nested Div chains before resolving:
+          Div(Div(N, d0), d1)  →  N % (d0 * d1) == 0  and  d0 * d1 <= N
+
+        Calls _resolve_expr() directly on each non-Div leaf node to avoid the
+        ceiling-division path that _resolve_expr() applies to Div nodes.
         """
         raw_iters = [iter_num["seq_iter"]] + list(iter_num.get("temp_iter", []))
         resolver = ExprResolver(self.symbol_map)
@@ -77,14 +94,27 @@ class SolverContext:
         for i, raw in enumerate(raw_iters):
             node = parse_expr(raw)
             if not isinstance(node, Div):
-                raise ValueError(f"Expected Div node in iter_num, got {type(node)}: {node}")
+                raise ValueError(
+                    f"Expected top-level Div node in iter_num[{i}], "
+                    f"got {type(node).__name__}: {node}"
+                )
 
-            num_cp = resolver.resolve(node.left)
-            denom_cp = resolver.resolve(node.right)
+            numerator_node, denom_nodes = self._flatten_div_chain(node)
+
+            # Resolve numerator — guaranteed non-Div by _flatten_div_chain
+            num_cp = resolver._resolve_expr(numerator_node)
+
+            # Build denominator product by resolving each denom leaf individually.
+            # This avoids calling _resolve_expr on a Div node (which would apply
+            # ceiling division instead of exact integer division).
+            denom_cp = resolver._resolve_expr(denom_nodes[0])
+            for d in denom_nodes[1:]:
+                denom_cp = denom_cp * resolver._resolve_expr(d)
+
             div_c = num_cp % denom_cp == 0
             pos_c = denom_cp <= num_cp
-            self.model += div_c   # divisible
-            self.model += pos_c   # positive (iter >= 1)
+            self.model += div_c
+            self.model += pos_c
             self._tracked_constraints.append((f"iter_div[{i}]", div_c))
             self._tracked_constraints.append((f"iter_pos[{i}]", pos_c))
 
