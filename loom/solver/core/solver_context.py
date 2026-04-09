@@ -17,6 +17,7 @@ class SolverContext:
         self.model = cp.Model()
         self.symbol_map: dict[str, cp.Expression] = {}
         self.boolean_names: set[str] = set()
+        self._tracked_constraints: list[tuple[str, cp.Expression]] = []
 
     def load_symbols(
         self,
@@ -52,13 +53,15 @@ class SolverContext:
     def add_hard_constraints(self, constraints_ast: list[Constraint]) -> None:
         """Resolve and add every hard constraint from AST nodes."""
         resolver = ExprResolver(self.symbol_map)
-        for c in constraints_ast:
+        for i, c in enumerate(constraints_ast):
             cp_c = resolver.resolve(c)
             if cp_c is not True:
                 self.model += cp_c
+                self._tracked_constraints.append((f"hard[{i}]", cp_c))
         # Add any auxiliary constraints generated during resolution
-        for aux in resolver.aux_constraints:
+        for j, aux in enumerate(resolver.aux_constraints):
             self.model += aux
+            self._tracked_constraints.append((f"hard_aux[{j}]", aux))
 
     def add_iter_num_constraints(self, iter_num: dict) -> None:
         """Add divisibility and positivity constraints for each iter_num expression.
@@ -71,15 +74,19 @@ class SolverContext:
         raw_iters = [iter_num["seq_iter"]] + list(iter_num.get("temp_iter", []))
         resolver = ExprResolver(self.symbol_map)
 
-        for raw in raw_iters:
+        for i, raw in enumerate(raw_iters):
             node = parse_expr(raw)
             if not isinstance(node, Div):
                 raise ValueError(f"Expected Div node in iter_num, got {type(node)}: {node}")
 
             num_cp = resolver.resolve(node.left)
             denom_cp = resolver.resolve(node.right)
-            self.model += num_cp % denom_cp == 0   # divisible
-            self.model += denom_cp <= num_cp        # positive (iter >= 1)
+            div_c = num_cp % denom_cp == 0
+            pos_c = denom_cp <= num_cp
+            self.model += div_c   # divisible
+            self.model += pos_c   # positive (iter >= 1)
+            self._tracked_constraints.append((f"iter_div[{i}]", div_c))
+            self._tracked_constraints.append((f"iter_pos[{i}]", pos_c))
 
     def find_optimum(
         self,
@@ -118,3 +125,38 @@ class SolverContext:
             return "UNKNOWN", None, None
         else:
             return "MODEL_INVALID", None, None
+
+    def find_mus(self) -> list[tuple[int, str, str]]:
+        """Return MUS as list of (original_index, label, expr_str).
+
+        Uses cpmpy.tools.mus.mus() with domain/structural constraints as hard
+        background and all tracked hard/iter constraints as soft candidates.
+        """
+        from cpmpy.tools.mus import mus as cpmpy_mus  # noqa: PLC0415
+
+        soft = [expr for _, expr in self._tracked_constraints]
+        labels = [label for label, _ in self._tracked_constraints]
+
+        # Anything added to the model but not tracked (e.g. InDomain domain
+        # constraints) is structural — keep it as hard background.
+        soft_set = set(id(e) for e in soft)
+        domain_constraints = [
+            c for c in self.model.constraints
+            if id(c) not in soft_set
+        ]
+
+        try:
+            mus_subset = cpmpy_mus(soft, hard=domain_constraints)
+        except Exception:
+            return []
+
+        result = []
+        for cp_expr in mus_subset:
+            try:
+                idx = next(
+                    i for i, e in enumerate(soft) if e is cp_expr
+                )
+            except StopIteration:
+                continue
+            result.append((idx, labels[idx], str(cp_expr)))
+        return result

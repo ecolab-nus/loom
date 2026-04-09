@@ -9,7 +9,7 @@ from typing import Any, Optional
 from ..loom_utils.io import load_variants
 from ..loom_utils.modeling import (
     get_variant_name, derive_domains_from_etg,
-    print_breakdown, print_result_summary,
+    print_breakdown, print_result_summary, print_mus,
 )
 from ..loom_utils.modeling import compute_total_time_ast
 from ..loom_utils.ast import parse_constraint
@@ -21,6 +21,7 @@ def solve_variant(
     index: int,
     total: int,
     domains: dict[str, list[int]],
+    debug: bool = False,
 ) -> dict:
     """Solve one variant and return a result dict."""
     ctx = SolverContext()
@@ -39,6 +40,10 @@ def solve_variant(
     ctx.add_iter_num_constraints(variant["constraint_scope"]["metadata"]["iter_num"])
     status, min_val, assignments = ctx.find_optimum(t_total_ast)
 
+    mus = None
+    if debug and status == "INFEASIBLE":
+        mus = ctx.find_mus()
+
     return {
         "variant": variant,
         "index": index,
@@ -46,17 +51,20 @@ def solve_variant(
         "status": status,
         "min_val": min_val,
         "assignments": assignments,
+        "mus": mus,
     }
 
 
 def _write_detailed_log(
-    results: list[dict], output_path: Path | str, total: int,
+    results: list[dict], output_path: Path | str, total: int, debug: bool = False,
 ) -> None:
     with open(output_path, "w", encoding="utf-8") as log:
         for r in results:
             vname = get_variant_name(r["variant"], r["index"])
             if r["status"] != "OPTIMAL":
                 print(f"Variant [{r['index']}/{total - 1}]: {vname}  {r['status']}\n", file=log)
+                if debug and r.get("mus"):
+                    print_mus(vname, r["mus"], file=log)
             else:
                 print_result_summary(vname, r["assignments"], r["min_val"], r["index"], total, file=log)
                 print("-" * 72, file=log)
@@ -81,7 +89,7 @@ def run(
     completed = 0
     with ProcessPoolExecutor(max_workers=njobs) as pool:
         futures = {
-            pool.submit(solve_variant, v, i, total, domains): i
+            pool.submit(solve_variant, v, i, total, domains, debug): i
             for i, v in enumerate(variants)
         }
         for f in as_completed(futures):
@@ -131,7 +139,7 @@ def run(
                 print(line)
 
     if output_path:
-        _write_detailed_log(results, output_path, total)
+        _write_detailed_log(results, output_path, total, debug=debug)
 
     if best:
         print("\nGLOBAL BEST")
