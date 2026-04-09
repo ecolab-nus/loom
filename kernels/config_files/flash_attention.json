@@ -1,9 +1,4 @@
 {
     "output_path": "test/flash_attention_2Dmesh",
-    "hw_spec": "third_party/loom-mlar/tests/2d_mesh/2d_mesh_torus.mlir",
-    "block_sizes": {
-        "block_size_0": {"lb": 4, "ub":4},
-        "block_size_1": {"lb": 64, "ub": 64},
-        "block_size_2": {"lb": 128, "ub": 128}
-    }
+    "hw_spec": "third_party/loom-mlar/tests/2d_mesh/2d_mesh_torus.mlir"
 }

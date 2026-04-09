@@ -1,9 +1,4 @@
 {
     "output_path": "test/matmul_2Dmesh",
-    "hw_spec": "third_party/loom-mlar/tests/2d_mesh/2d_mesh_torus.mlir",
-    "block_sizes": {
-        "block_size_0": {"lb": 32, "ub": 4096},
-        "block_size_1": {"lb": 32, "ub": 4096},
-        "block_size_2": {"lb": 32, "ub": 512}
-    }
+    "hw_spec": "third_party/loom-mlar/tests/2d_mesh/2d_mesh_torus.mlir"
 }
