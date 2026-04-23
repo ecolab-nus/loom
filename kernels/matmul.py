@@ -45,6 +45,7 @@ class Matmul(LoomKernel):
     M: int = 4096
     K: int = 256
     N: int = 4096
+    assume_divisible_tiles: bool = True
 
     # Assign the helion-decorated function as a class attribute.
     # We cannot stack @staticmethod with @helion.kernel because the helion
