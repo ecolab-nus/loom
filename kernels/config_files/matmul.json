@@ -1,4 +1,12 @@
 {
     "output_path": "test/matmul_2Dmesh",
-    "hw_spec": "third_party/loom-mlar/tests/2d_mesh/2d_mesh_torus.mlir"
+    "hw_spec": "third_party/loom-mlar/tests/2d_mesh/2d_mesh_torus.mlir",
+    "assigned_block_size": {
+        "_matmul__x8_y8__d0i0_d1i1__f01__n_n_n": {
+            "is_double_buffer": 1,
+            "tile_k": 64,
+            "tile_m": 512,
+            "tile_n": 512
+        }
+    }
 }

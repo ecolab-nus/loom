@@ -93,10 +93,16 @@ class LoomKernel:
     ``kernel_name: str``
         Human-readable name shown in CLI help text.  Defaults to the
         class name.
+
+    ``assume_divisible_tiles: bool``
+        Passed to ``helion_mlir.generate_mlir``. When true, lowering assumes
+        tile bounds are divisible and may omit dynamic tail handling.
     """
 
     # Override in subclass for a nicer description in --help.
     kernel_name: ClassVar[str] = ""
+    # Override per kernel to control Helion MLIR lowering behavior.
+    assume_divisible_tiles: ClassVar[bool] = False
 
     # ------------------------------------------------------------------ #
     # Subclass interface                                                   #
@@ -134,7 +140,10 @@ class LoomKernel:
         args = cls.bind_args()
         bound = cls.kernel.bind(args)
         print_debug_info(bound)
-        return _helion_generate_mlir(bound)
+        return _helion_generate_mlir(
+            bound,
+            assume_divisible_tiles=cls.assume_divisible_tiles,
+        )
 
     # ------------------------------------------------------------------ #
     # CLI                                                                  #
