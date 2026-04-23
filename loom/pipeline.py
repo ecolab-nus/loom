@@ -13,9 +13,12 @@ Pipeline stages
 ---------------
   0. Helion frontend   – call ``generate_mlir_fn()`` → raw MLIR text
   1. Exploration        – C++ passes via pybind11 (loom_pipeline)
-  2. ETG resolution     – MLAR Rust evaluator (loom_utils)
-  3. CP-SAT solver      – CPMpy/OR-Tools block-size optimizer (loom.solver)
+  2. ETG resolution     – MLAR Rust evaluator (loom_utils, optional)
+  3. CP-SAT solver      – CPMpy/OR-Tools block-size optimizer (optional)
   4. Materialization    – C++ passes via pybind11 (loom_pipeline)
+
+When ``assigned_block_size`` is provided (non-empty), ETG generation is
+skipped in Step 1 and Steps 2/3 are bypassed entirely.
 
 Output layout under <output_path>
 ----------------------------------
@@ -83,8 +86,12 @@ def run_step_1_exploration(
     ir_dir: Path,
     constraints_dir: Path,
     debug: bool,
+    skip_etg: bool = False,
 ) -> tuple[str, str]:
-    """Step 1: Exploration pipeline (stages 0→5) via pybind11."""
+    """Step 1: Exploration pipeline (stages 0→5) via pybind11.
+
+    If ``skip_etg`` is True, ETG generation is disabled and no ETG file is written.
+    """
     logging.info("")
     logging.info("=" * 72)
     logging.info("STEP 1: EXPLORATION PIPELINE (stages 0→5)")
@@ -98,15 +105,20 @@ def run_step_1_exploration(
 
     if debug:
         logging.info(f"  Output     : {p01}")
-    logging.info(f"  ETG output : {exploration_etg}")
+    if skip_etg:
+        logging.info("  ETG output : [SKIPPED via assigned_block_size override]")
+    else:
+        logging.info(f"  ETG output : {exploration_etg}")
 
     with pipeline_timer("Step 1: Exploration Pipeline"):
         explored_mlir, etg_json_text = run_exploration(
             input_mlir=mlir_text,
             hw_spec_file=hw_spec,
             produce_etg=True,
+            skip_etg=skip_etg,
         )
-        exploration_etg.write_text(etg_json_text)
+        if not skip_etg:
+            exploration_etg.write_text(etg_json_text)
         if debug:
             p01.write_text(explored_mlir)
 
@@ -262,6 +274,7 @@ def run_pipeline(
     njobs: int = 1,
     debug: bool = False,
     symbol_domains: dict[str, list[int]] | None = None,
+    assigned_block_size: dict[str, Any] | None = None,
     optimal_only: bool = False,
 ) -> None:
     """Run the full Loom compilation pipeline.
@@ -284,6 +297,10 @@ def run_pipeline(
         Optional per-symbol domain overrides mapping symbol name to a list
         of allowed values.  If provided, the solver uses these domains
         instead of the built-in defaults.  Steps 2 and 3 still run in all cases.
+    assigned_block_size:
+        Optional explicit block-size assignments to use directly for
+        materialization. When provided as a non-empty dict, Step 1 runs with
+        ``skip_etg=True`` and Steps 2/3 are skipped.
     optimal_only:
         Optional boolean to keep only the optimal candidates.
     """
@@ -296,27 +313,43 @@ def run_pipeline(
     # Step 0: Helion frontend
     mlir_text = run_step_0_frontend(generate_mlir_fn, ir_dir, debug)
 
+    has_assigned_block_size = bool(assigned_block_size)
+
     # Step 1: Exploration
     explored_mlir, etg_json_text = run_step_1_exploration(
-        mlir_text, str(hw_spec), ir_dir, constraints_dir, debug
+        mlir_text, str(hw_spec), ir_dir, constraints_dir, debug,
+        skip_etg=has_assigned_block_size,
     )
     del mlir_text
 
-    # Step 2: ETG resolution
-    run_step_2_etg_resolution(etg_json_text, njobs, constraints_dir)
+    if has_assigned_block_size:
+        logging.info("")
+        logging.info("=" * 72)
+        logging.info("STEP 2: ETG RESOLUTION (MLAR evaluator)")
+        logging.info("=" * 72)
+        logging.info("Skipped due to assigned_block_size override.")
+        logging.info("")
+        logging.info("=" * 72)
+        logging.info("STEP 3: SOLVER (CPMpy/CP-SAT)")
+        logging.info("=" * 72)
+        logging.info("Skipped due to assigned_block_size override.")
+        block_size = assigned_block_size
+    else:
+        # Step 2: ETG resolution
+        run_step_2_etg_resolution(etg_json_text, njobs, constraints_dir)
 
-    # Step 3: Solver
-    resolved_etg_path = constraints_dir / "p02_resolved_etg.json"
-    broadcast = run_step_3_solve(
-        resolved_etg_path, njobs, debug, constraints_dir,
-        symbol_domains=symbol_domains,
-        optimal_only=optimal_only,
-    )
+        # Step 3: Solver
+        resolved_etg_path = constraints_dir / "p02_resolved_etg.json"
+        block_size = run_step_3_solve(
+            resolved_etg_path, njobs, debug, constraints_dir,
+            symbol_domains=symbol_domains,
+            optimal_only=optimal_only,
+        )
 
     del etg_json_text
 
     # Step 4: Materialization
-    run_step_4_materialization(explored_mlir, broadcast, ir_dir)
+    run_step_4_materialization(explored_mlir, block_size, ir_dir)
     del explored_mlir
 
     if debug:

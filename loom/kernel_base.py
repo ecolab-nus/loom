@@ -46,6 +46,22 @@ CLI produced (inherited from LoomKernel)
         --output-path  DIR \
         --hw-spec      PATH \
         [--njobs N] [--debug]
+
+Config file notes
+-----------------
+::
+
+    {
+      "output_path": "...",
+      "hw_spec": "...",
+      "assigned_block_size": {
+        "variant_name": {"tile_m": 512, "tile_n": 512, "tile_k": 64}
+      }
+    }
+
+When ``assigned_block_size`` is a non-empty JSON object, Loom skips ETG
+generation/resolution and solver stages, then uses these values directly
+for materialization.
 """
 from __future__ import annotations
 
@@ -197,6 +213,7 @@ class LoomKernel:
         output_path = args.output_path or config_data.get("output_path")
         hw_spec = args.hw_spec or config_data.get("hw_spec") or config_data.get("df_mlir")
         block_sizes = config_data.get("block_sizes")
+        assigned_block_size = config_data.get("assigned_block_size")
 
         # Required parameter check
         missing = []
@@ -207,6 +224,10 @@ class LoomKernel:
 
         if missing:
             parser.error(f"The following parameters are required: {', '.join(missing)}")
+
+        if assigned_block_size is not None and not isinstance(assigned_block_size, dict):
+            parser.error("Config 'assigned_block_size' must be a JSON object.")
+        has_assigned_block_size = bool(assigned_block_size)
 
         symbol_domains = None
         if block_sizes is not None:
@@ -232,5 +253,6 @@ class LoomKernel:
             njobs=args.njobs,
             debug=args.debug,
             symbol_domains=symbol_domains,
+            assigned_block_size=assigned_block_size if has_assigned_block_size else None,
             optimal_only=args.optimal_only,
         )
