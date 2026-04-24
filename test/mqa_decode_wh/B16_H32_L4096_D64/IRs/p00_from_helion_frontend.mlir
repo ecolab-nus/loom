@@ -2,8 +2,8 @@
 #map1 = affine_map<(d0, d1, d2) -> (d0, d1, 0)>
 #map2 = affine_map<(d0, d1, d2, d3) -> (d0, d1, d2, d3)>
 #map3 = affine_map<(d0, d1, d2, d3) -> (d1, d2, d3)>
-module attributes {loom.tile_b = {is_reduction = false, upper_bound = 16 : index}, loom.tile_n = {is_reduction = false, upper_bound = 64 : index}, loom.tile_s = {is_reduction = false, upper_bound = 4096 : index}} {
-  func.func @_mqa_decode(%arg0: memref<16x64x4096xf16>, %arg1: memref<16x4096x64xf16>, %arg2: memref<16x32x64xf16>, %arg3: memref<16x32x64xf16>) {
+module attributes {loom.tile_b = {is_reduction = false, upper_bound = 8 : index}, loom.tile_n = {is_reduction = false, upper_bound = 64 : index}, loom.tile_s = {is_reduction = false, upper_bound = 4096 : index}} {
+  func.func @_mqa_decode(%arg0: memref<8x64x4096xf16>, %arg1: memref<8x4096x64xf16>, %arg2: memref<8x32x64xf16>, %arg3: memref<8x32x64xf16>) {
     %c0_i64 = arith.constant 0 : i64
     %c0 = arith.constant 0 : index
     %cst = arith.constant 0.000000e+00 : f16
@@ -12,11 +12,11 @@ module attributes {loom.tile_b = {is_reduction = false, upper_bound = 16 : index
     %c1 = arith.constant 1 : index
     %cst_2 = arith.constant 1.250000e-01 : f16
     %c4096 = arith.constant 4096 : index
-    %c16 = arith.constant 16 : index
-    %0 = "loom.sym"() {is_reduction = false, symbol_ref = @tile_b, upper_bound = 16 : index} : () -> index
+    %c8 = arith.constant 8 : index
+    %0 = "loom.sym"() {is_reduction = false, symbol_ref = @tile_b, upper_bound = 8 : index} : () -> index
     %1 = "loom.sym"() {is_reduction = false, symbol_ref = @tile_s, upper_bound = 4096 : index} : () -> index
     %2 = "loom.sym"() {is_reduction = false, symbol_ref = @tile_n, upper_bound = 64 : index} : () -> index
-    %3 = arith.ceildivui %c16, %0 : index
+    %3 = arith.ceildivui %c8, %0 : index
     %4 = arith.ceildivui %c4096, %1 : index
     affine.parallel (%arg4, %arg5) = (0, 0) to (symbol(%3), symbol(%4)) {
       %5 = tensor.empty(%0) : tensor<?x32x1xf16>
@@ -25,7 +25,7 @@ module attributes {loom.tile_b = {is_reduction = false, upper_bound = 16 : index
       %8 = tensor.empty(%0) : tensor<?x32x64xf16>
       %9 = linalg.fill ins(%cst : f16) outs(%8 : tensor<?x32x64xf16>) -> tensor<?x32x64xf16>
       %10 = arith.muli %arg4, %0 : index
-      %subview = memref.subview %arg3[%10, 0, 0] [%0, 32, 64] [1, 1, 1] : memref<16x32x64xf16> to memref<?x32x64xf16, strided<[2048, 64, 1], offset: ?>>
+      %subview = memref.subview %arg3[%10, 0, 0] [%0, 32, 64] [1, 1, 1] : memref<8x32x64xf16> to memref<?x32x64xf16, strided<[2048, 64, 1], offset: ?>>
       %11 = bufferization.to_tensor %subview : memref<?x32x64xf16, strided<[2048, 64, 1], offset: ?>> to tensor<?x32x64xf16>
       %12 = arith.muli %arg5, %1 : index
       %13 = arith.addi %12, %1 : index
@@ -34,7 +34,7 @@ module attributes {loom.tile_b = {is_reduction = false, upper_bound = 16 : index
       %16:3 = scf.for %arg6 = %c0 to %15 step %c1 iter_args(%arg7 = %6, %arg8 = %7, %arg9 = %9) -> (tensor<?x32x1xf16>, tensor<?x32x1xf16>, tensor<?x32x64xf16>) {
         %27 = arith.muli %arg6, %2 : index
         %28 = arith.addi %12, %27 : index
-        %subview_3 = memref.subview %arg0[%10, 0, %28] [%0, 64, %2] [1, 1, 1] : memref<16x64x4096xf16> to memref<?x64x?xf16, strided<[262144, 4096, 1], offset: ?>>
+        %subview_3 = memref.subview %arg0[%10, 0, %28] [%0, 64, %2] [1, 1, 1] : memref<8x64x4096xf16> to memref<?x64x?xf16, strided<[262144, 4096, 1], offset: ?>>
         %29 = bufferization.to_tensor %subview_3 : memref<?x64x?xf16, strided<[262144, 4096, 1], offset: ?>> to tensor<?x64x?xf16>
         %30 = arith.index_cast %0 : index to i64
         %31 = arith.cmpi eq, %30, %30 : i64
@@ -107,7 +107,7 @@ module attributes {loom.tile_b = {is_reduction = false, upper_bound = 16 : index
           %56 = arith.mulf %in, %in_5 : f16
           linalg.yield %56 : f16
         } -> tensor<?x32x64xf16>
-        %subview_4 = memref.subview %arg1[%10, %28, 0] [%0, %2, 64] [1, 1, 1] : memref<16x4096x64xf16> to memref<?x?x64xf16, strided<[262144, 64, 1], offset: ?>>
+        %subview_4 = memref.subview %arg1[%10, %28, 0] [%0, %2, 64] [1, 1, 1] : memref<8x4096x64xf16> to memref<?x?x64xf16, strided<[262144, 64, 1], offset: ?>>
         %51 = bufferization.to_tensor %subview_4 : memref<?x?x64xf16, strided<[262144, 64, 1], offset: ?>> to tensor<?x?x64xf16>
         cf.assert %31, "mismatching contracting dimension"
         %52 = arith.index_cast %2 : index to i64
@@ -190,7 +190,7 @@ module attributes {loom.tile_b = {is_reduction = false, upper_bound = 16 : index
           %41 = arith.addf %in, %out : f16
           linalg.yield %41 : f16
         } -> tensor<?x32x64xf16>
-        %subview_3 = memref.subview %arg2[%10, 0, 0] [%0, 32, 64] [1, 1, 1] : memref<16x32x64xf16> to memref<?x32x64xf16, strided<[2048, 64, 1], offset: ?>>
+        %subview_3 = memref.subview %arg2[%10, 0, 0] [%0, 32, 64] [1, 1, 1] : memref<8x32x64xf16> to memref<?x32x64xf16, strided<[2048, 64, 1], offset: ?>>
         %40 = bufferization.to_buffer %39 : tensor<?x32x64xf16> to memref<?x32x64xf16, strided<[2048, 64, 1], offset: ?>>
         memref.copy %40, %subview_3 : memref<?x32x64xf16, strided<[2048, 64, 1], offset: ?>> to memref<?x32x64xf16, strided<[2048, 64, 1], offset: ?>>
       }
