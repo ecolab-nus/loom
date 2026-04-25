@@ -7,7 +7,7 @@
             "tile_m": 256,
             "tile_n": 32,
             "tile_k": 256,
-            "tile_h": 48,
+            "tile_h": 32,
             "tile_b": 1,
             "tile_c": 32
             

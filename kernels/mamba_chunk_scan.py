@@ -2,8 +2,8 @@
 
 Standalone CLI script. Run from the repo root:
 
-    python kernels/mamba_chunk_scan_wh/L8192_N32_H128_G4_D128_C256.py \
-        --config kernels/config_files/mamba_chunk_scan_wh/L8192_N32_H128_G4_D128_C256.json \
+    python kernels/mamba_chunk_scan_wh/L4096_N128_H128_G8_D128_C512.py \
+        --config kernels/config_files/mamba_chunk_scan_wh/L4096_N128_H128_G8_D128_C512.json \
         --njobs 1 \
         --debug
 
@@ -14,11 +14,14 @@ and bind_args tensors, and keep the __main__ block unchanged.
 
 from __future__ import annotations
 
+import sys
+
 import torch
 import helion
 import helion.language as hl
 
 from loom import LoomKernel
+from loom.loom_utils.kernel_size import resolve_kernel_shape_args
 
 from helion_mlir.custome_op import broadcast  # registers the op with Helion's decorator API
 
@@ -184,17 +187,33 @@ class MambaChunkScan(LoomKernel):
     kernel_name = "mamba_chunk_scan"
 
     BATCH: int = 2
-    SEQLEN: int = 8192
-    NHEADS: int = 32
+    SEQLEN: int = 4096
+    NHEADS: int = 128
     HEADDIM: int = 128
-    NGROUPS: int = 4
+    NGROUPS: int = 8
     DSTATE: int = 128
-    CHUNK_SIZE: int = 256
+    CHUNK_SIZE: int = 512
     
 
     kernel = helion.kernel(
         static_shapes=False,
     )(_mamba_chunk_scan)
+
+    def __init__(self, shape: dict[str, int] | None = None) -> None:
+        if shape:
+            cls = type(self)
+            key_to_attr = {
+                "B": "BATCH",
+                "L": "SEQLEN",
+                "N": "NHEADS",
+                "H": "HEADDIM",
+                "G": "NGROUPS",
+                "D": "DSTATE",
+                "C": "CHUNK_SIZE",
+            }
+            for key, value in shape.items():
+                attr = key_to_attr.get(key, key)
+                setattr(cls, attr, value)
 
     @classmethod
     def bind_args(cls) -> tuple:
@@ -219,4 +238,11 @@ class MambaChunkScan(LoomKernel):
 
 
 if __name__ == "__main__":
-    MambaChunkScan.run()
+    try:
+        shape, normalized_argv = resolve_kernel_shape_args(sys.argv)
+    except ValueError as exc:
+        raise SystemExit(str(exc)) from exc
+
+    sys.argv = normalized_argv
+    kernel = MambaChunkScan(shape)
+    kernel.run()

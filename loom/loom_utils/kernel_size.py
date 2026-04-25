@@ -44,13 +44,18 @@ def resolve_kernel_shape_args(argv: list[str]) -> tuple[dict[str, int] | None, l
             idx += 1
             continue
 
-        if token.startswith("-B"):
+        if token.startswith("-") and not token.startswith("--") and len(token) > 1:
             candidate = token[1:]
-            if kernel_shape is not None:
-                raise ValueError("Multiple kernel size overrides provided.")
-            kernel_shape = parse_kernel_size(candidate)
-            idx += 1
-            continue
+            try:
+                parsed = parse_kernel_size(candidate)
+            except ValueError:
+                parsed = None
+            if parsed is not None:
+                if kernel_shape is not None:
+                    raise ValueError("Multiple kernel size overrides provided.")
+                kernel_shape = parsed
+                idx += 1
+                continue
 
         if token == "--kernel-size":
             if idx + 1 >= len(argv):
