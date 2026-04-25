@@ -1,6 +1,9 @@
 #vscode stuff
 .vscode/
 
+#codex
+.codex
+
 # Python packaging artifacts
 *.egg-info/
 __pycache__/
@@ -14,3 +17,6 @@ third_party/loom-mlar/bin/
 
 # Whole pipeline artifacts(constraints)
 test/*/constraints/
+
+# testcases
+test/
