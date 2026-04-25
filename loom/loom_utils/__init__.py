@@ -9,7 +9,7 @@ from importlib.metadata import version as _pkg_version
 
 # Pin the exact loom-dataflow version this code was written against.
 # Bump this manually when updating loom to a new loom-dataflow API.
-LOOM_DATAFLOW_REQUIRED_VERSION = "1.0.3"
+LOOM_DATAFLOW_REQUIRED_VERSION = "1.0.4"
 
 _installed = _pkg_version("loom-dataflow")
 if _installed != LOOM_DATAFLOW_REQUIRED_VERSION:
