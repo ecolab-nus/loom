@@ -157,7 +157,7 @@ def _mamba_chunk_scan(
                 tile_n,
             ]
             # hl.dot([tile_m, tile_k], [tile_k, tile_n]) -> [tile_m, tile_n]
-            acc_o = hl.dot(cb_local, x_local, acc=acc_o)
+            acc_o = torch.addmm(acc_o, cb_local, x_local)
 
         # D_local: scalar
         D_local = D[tile_h.begin]
