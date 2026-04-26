@@ -6,7 +6,7 @@ import shutil
 import subprocess
 from pathlib import Path
 
-from .utils import contains_sequential as _contains_sequential
+from .utils import is_innermost_sequential_node, is_sequential_node
 
 _REPO_ROOT = Path(__file__).resolve().parents[3]
 
@@ -74,21 +74,36 @@ def _fill_func_scenarios(schedules, *, evaluator_path=None):
 def resolve_schedule(
     node,
     evaluator_path: Path | str | None = None,
+    *,
+    _path: str = "$",
 ) -> dict:
-    """Walk *node* and evaluate every innermost Sequential with the Rust binary."""
+    """Walk *node* and evaluate every innermost Sequential with the Rust binary.
+
+    Structural ETG containers such as kernel_block, for_loop_block, scopes,
+    stages, and Parallel lists are intentionally transparent here. The MLAR
+    evaluator only sees leaf Sequential payloads.
+    """
     if isinstance(node, list):
-        return [resolve_schedule(item, evaluator_path) for item in node]
+        return [
+            resolve_schedule(item, evaluator_path, _path=f"{_path}[{idx}]")
+            for idx, item in enumerate(node)
+        ]
 
     if not isinstance(node, dict):
         return node
 
-    if "Sequential" in node:
+    if is_sequential_node(node):
         inner = node["Sequential"]
         schedules = inner.get("schedules", [])
-        if not any(_contains_sequential(child) for child in schedules):
-            full_result = evaluate_schedule(
-                {"Sequential": inner}, evaluator_path=evaluator_path
-            )
+        if is_innermost_sequential_node(node):
+            try:
+                full_result = evaluate_schedule(
+                    {"Sequential": inner}, evaluator_path=evaluator_path
+                )
+            except Exception as exc:
+                raise RuntimeError(
+                    f"Failed to evaluate innermost Sequential at {_path}"
+                ) from exc
             evaluated_fields = full_result["Sequential"]
             filled_inner = {**inner, **evaluated_fields}
             filled_inner["schedules"] = _fill_func_scenarios(
@@ -96,7 +111,17 @@ def resolve_schedule(
                 evaluator_path=evaluator_path,
             )
             return {**node, "Sequential": filled_inner}
-        new_schedules = [resolve_schedule(child, evaluator_path) for child in schedules]
+        new_schedules = [
+            resolve_schedule(
+                child,
+                evaluator_path,
+                _path=f"{_path}.Sequential.schedules[{idx}]",
+            )
+            for idx, child in enumerate(schedules)
+        ]
         return {**node, "Sequential": {**inner, "schedules": new_schedules}}
 
-    return {k: resolve_schedule(v, evaluator_path) for k, v in node.items()}
+    return {
+        k: resolve_schedule(v, evaluator_path, _path=f"{_path}.{k}")
+        for k, v in node.items()
+    }
