@@ -12,7 +12,9 @@ def parse_kernel_size(value: str) -> dict[str, int]:
 
     out: dict[str, int] = {}
     for part in value.split("_"):
-        match = re.fullmatch(r"([A-Za-z][A-Za-z0-9]*)(\d+)", part)
+        # Keep the KEY prefix non-greedy so trailing digits are parsed as VALUE.
+        # Example: "L1024" -> key="L", value=1024 (not key="L102", value=4).
+        match = re.fullmatch(r"([A-Za-z][A-Za-z0-9]*?)(\d+)", part)
         if not match:
             raise ValueError(
                 f"Invalid kernel size segment: {part}. Expected <KEY><int>, e.g. B1 or TILE64."
