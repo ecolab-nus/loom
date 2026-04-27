@@ -7,9 +7,9 @@
             "tile_m": 128,
             "tile_n": 32,
             "tile_k": 128,
-            "tile_h": 48,
+            "tile_h": 1,
             "tile_b": 1,
-            "tile_c": 16
+            "tile_c": 1
             
         }
     }
