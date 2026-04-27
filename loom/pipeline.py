@@ -217,52 +217,6 @@ def run_step_4_materialization(
 
 
 # ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
-def validate_and_broadcast_block_sizes(
-    manual_block_sizes: dict[str, int],
-    etg_json_text: str,
-) -> dict[str, dict[str, int]]:
-    """Validate that manual block sizes cover all ETG symbols and broadcast to all variants.
-
-    Parameters
-    ----------
-    manual_block_sizes:
-        A single dictionary of {symbol_name: value}.
-    etg_json_text:
-        The raw ETG JSON string from Step 1.
-
-    Returns
-    -------
-    A broadcast dict compatible with Step 4: {variant_name: manual_block_sizes}.
-    """
-    variants = json.loads(etg_json_text)
-    if not variants:
-        return {}
-
-    # Extract all unique symbols required by any variant
-    required_symbols = set()
-    for v in variants:
-        symbols = v.get("constraint_scope", {}).get("metadata", {}).get("symbols", {})
-        required_symbols.update(symbols.keys())
-
-    # Guard: check coverage
-    missing = [s for s in required_symbols if s not in manual_block_sizes]
-    if missing:
-        raise ValueError(
-            f"Manual block_sizes are missing values for the following symbols "
-            f"required by the ETG: {', '.join(sorted(missing))}"
-        )
-
-    # Broadcast
-    return {
-        v.get("variant_name", f"variant_{i}"): manual_block_sizes
-        for i, v in enumerate(variants)
-    }
-
-
-# ---------------------------------------------------------------------------
 # Public API — single entry point
 # ---------------------------------------------------------------------------
 
