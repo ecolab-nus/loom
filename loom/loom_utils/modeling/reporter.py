@@ -43,67 +43,80 @@ def print_breakdown(
     p(f"Iteration factors:  seq_iter={seq_val},  temp_iter=[{temp_str}]  (product={temp_product})")
     p()
 
-    scope_totals: list[tuple[str, int]] = []
+    root = variant.get("kernel_block", variant)
+    _print_block(root, assignments, depth=1, p=p)
 
-    for scope_key in ("compute_scope", "memory_scope"):
-        scope = variant[scope_key]
-        scope_name = scope.get("scope_name", scope_key)
-        p(f"  [{scope_name}]")
-
-        scope_total = 0
-        for stage in scope["stages"]:
-            p(f"    Stage {stage.get('stage_id', '?')}:")
-
-            parallel = stage["Parallel"]
-            stage_max_cost = 0
-
-            for i, parallel_item in enumerate(parallel):
-                seq = parallel_item["Sequential"]
-                scenarios = seq["scenarios"]
-
-                matched_idx = None
-                matched_cost = None
-                for si, scenario in enumerate(scenarios):
-                    cond_ast = parse_constraint(scenario["constraints"])
-                    if cond_ast.eval(assignments):
-                        matched_idx = si
-                        matched_cost = parse_expr(scenario["time_cost"]).eval(assignments)
-                        break
-
-                if matched_cost is not None:
-                    label = f"scenario[{matched_idx}]"
-                    if len(parallel) > 1:
-                        label = f"Parallel[{i}] {label}"
-                    p(f"      {label:<20s}  {matched_cost:>10,} cycles")
-                    
-                    if matched_cost > stage_max_cost:
-                        stage_max_cost = matched_cost
-                else:
-                    label = "(no scenario matched)"
-                    if len(parallel) > 1:
-                        label = f"Parallel[{i}] {label}"
-                    p(f"      {label}")
-
-            if len(parallel) > 1:
-                p(f"      {'→ stage max':20s}  {stage_max_cost:>10,} cycles")
-            
-            scope_total += stage_max_cost
-
-        p(f"  {'→ scope total':16s}  {scope_total:>10,} cycles")
-        p()
-        scope_totals.append((scope_name, scope_total))
-
-    comp_scopes = [v for n, v in scope_totals if "compute" in n.lower()]
-    mem_scopes = [v for n, v in scope_totals if "memory" in n.lower()]
-    t_comp = comp_scopes[0] if comp_scopes else 0
-    t_mem = mem_scopes[0] if mem_scopes else 0
-    t_stage = max(t_comp, t_mem)
-
-    p(f"  T_comp  = {t_comp:>10,} cycles")
-    p(f"  T_mem   = {t_mem:>10,} cycles")
-    p(f"  T_stage = max(T_comp, T_mem) = {t_stage:,} cycles")
-    p(f"  T_total = {t_stage:,} × {seq_val} × {temp_product} = {t_stage * seq_val * temp_product:,} cycles")
+    p(f"  T_total = {min_val:,} cycles")
     p()
+
+
+def _eval_scenario(scenarios: list[dict], assignments: dict) -> tuple[int | None, int | None]:
+    for si, scenario in enumerate(scenarios):
+        if parse_constraint(scenario["constraints"]).eval(assignments):
+            return si, parse_expr(scenario["time_cost"]).eval(assignments)
+    return None, None
+
+
+def _print_block(block: dict, assignments: dict, depth: int, p) -> int:
+    """Recursively print a kernel_block or for_loop_block; return evaluated total cost."""
+    indent = "  " * depth
+
+    t_comp = _print_scope(block["compute_scope"], assignments, depth, p)
+    t_mem  = _print_scope(block["memory_scope"],  assignments, depth, p)
+
+    is_db = assignments.get("is_double_buffer", 0)
+    t_self = max(t_comp, t_mem) if is_db else (t_comp + t_mem)
+    p(f"{indent}T_comp={t_comp:,}  T_mem={t_mem:,}  "
+      f"{'max' if is_db else 'sum'}={t_self:,} cycles")
+    return t_self
+
+
+def _print_scope(scope: dict, assignments: dict, depth: int, p) -> int:
+    """Print stages within one scope; return sum of stage costs."""
+    stages = scope.get("stages", [])
+    if not stages:
+        return 0
+    indent = "  " * depth
+    scope_name = scope.get("scope_name", "scope")
+    p(f"{indent}[{scope_name}]")
+    total = 0
+    for stage in stages:
+        total += _print_stage(stage, assignments, depth + 1, p)
+    p(f"{indent}  → scope total: {total:,} cycles")
+    return total
+
+
+def _print_stage(stage: dict, assignments: dict, depth: int, p) -> int:
+    """Print one stage; return its evaluated cost."""
+    indent = "  " * depth
+    stage_id = stage.get("stage_id", "?")
+
+    if "for_loop_block" in stage:
+        flb = stage["for_loop_block"]
+        trip = parse_expr(flb["trip_count"]).eval(assignments)
+        block_sym = flb.get("block_sym") or "loop"
+        p(f"{indent}Stage {stage_id} [for_loop_block block_sym={block_sym!r} trip={trip}]")
+        inner = _print_block(flb, assignments, depth + 1, p)
+        cost = inner * trip
+        p(f"{indent}  → {inner:,} × {trip} = {cost:,} cycles")
+        return cost
+
+    if "Parallel" in stage:
+        parallel = stage["Parallel"]
+        p(f"{indent}Stage {stage_id} [Parallel × {len(parallel)}]")
+        branch_costs = []
+        for i, item in enumerate(parallel):
+            scenarios = item["Sequential"]["scenarios"]
+            si, cost = _eval_scenario(scenarios, assignments)
+            label = f"Parallel[{i}] scenario[{si}]" if si is not None else f"Parallel[{i}] (no match)"
+            p(f"{indent}  {label:<30s}  {cost if cost is not None else '?':>10} cycles")
+            branch_costs.append(cost or 0)
+        stage_cost = max(branch_costs)
+        if len(branch_costs) > 1:
+            p(f"{indent}  → stage max: {stage_cost:,} cycles")
+        return stage_cost
+
+    return 0
 
 
 def print_active_constraints(
