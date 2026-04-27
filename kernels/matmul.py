@@ -24,13 +24,13 @@ def _matmul(x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
     m, k = x.size()
     k2, n = y.size()
     assert k == k2
-    out = torch.empty([m, n], dtype=torch.promote_types(x.dtype, y.dtype), device=x.device)
+    out_ = torch.empty([m, n], dtype=torch.promote_types(x.dtype, y.dtype), device=x.device)
     for tile_m, tile_n in hl.tile([m, n]):
         acc = hl.zeros([tile_m, tile_n], dtype=torch.float16)
         for tile_k in hl.tile(k):
             acc = torch.addmm(acc, x[tile_m, tile_k], y[tile_k, tile_n])
-        out[tile_m, tile_n] = acc
-    return out
+        out_[tile_m, tile_n] = acc
+    return out_
 
 
 class Matmul(LoomKernel):

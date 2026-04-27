@@ -30,7 +30,7 @@ def _flash__attention(
     q_view = q_in.reshape([-1, m_dim, head_dim])
     v_view = v_in.reshape([-1, n_dim, head_dim])
     k_view = k_in.reshape([-1, n_dim, head_dim]).transpose(1, 2)
-    out = torch.empty_like(q_view)
+    out_ = torch.empty_like(q_view)
     sm_scale = 1.0 / math.sqrt(head_dim)
     for tile_b, tile_m in hl.tile([q_view.size(0), m_dim]):
         qk_scale_dev = hl.full([], sm_scale * 1.44269504, dtype=torch.float16)
@@ -54,8 +54,8 @@ def _flash__attention(
             m_i = m_ij
         m_i += torch.log2(l_i)
         acc = acc / l_i[:, :, None]
-        out[tile_b, tile_m, :] = acc.to(out.dtype)
-    return out.view(q_in.size())
+        out_[tile_b, tile_m, :] = acc.to(out_.dtype)
+    return out_.view(q_in.size())
 
 
 class FlashAttention(LoomKernel):
