@@ -9,22 +9,32 @@ hw_spec_prefix="third_party/loom-mlar/tests/2d_mesh/"
 # Run matrix entries are: "kernel_size|config|hw_spec"
 # wh
 run_matrix_wh=(
-  "B8_H32_L16384_D64|fixed_block_size.json|2d_mesh_torus_x8y8.mlir"
-  "B8_H32_L16384_D128|fixed_block_size.json|2d_mesh_torus_x8y8.mlir"
-  "B16_H32_L8192_D64|fixed_block_size.json|2d_mesh_torus_x8y8.mlir"
-  "B16_H32_L8192_D128|fixed_block_size.json|2d_mesh_torus_x8y8.mlir"
-  "B32_H32_L4096_D64|fixed_block_size.json|2d_mesh_torus_x8y8.mlir"
-  "B32_H32_L4096_D128|fixed_block_size.json|2d_mesh_torus_x8y8.mlir"
+  "B8_H32_L1024_D64|fixed_block_size.json|2d_mesh_torus_x2y8.mlir"
+  "B8_H32_L2048_D64|fixed_block_size.json|2d_mesh_torus_x4y8.mlir"
+  "B8_H32_L4096_D64|fixed_block_size.json|2d_mesh_torus_x8y8.mlir"
+
+  "B16_H32_L1024_D64|fixed_block_size.json|2d_mesh_torus_x2y8.mlir"
+  "B16_H32_L2048_D64|fixed_block_size.json|2d_mesh_torus_x4y8.mlir"
+  "B16_H32_L4096_D64|fixed_block_size.json|2d_mesh_torus_x8y8.mlir"
+
+  "B24_H32_L1024_D64|fixed_block_size.json|2d_mesh_torus_x2y8.mlir"
+  "B24_H32_L2048_D64|fixed_block_size.json|2d_mesh_torus_x4y8.mlir"
+  "B24_H32_L4096_D64|fixed_block_size.json|2d_mesh_torus_x8y8.mlir"
 )
 
 # bh
 run_matrix_bh=(
-  "B10_H32_L24576_D64|fixed_block_size.json|2d_mesh_torus_x12y10.mlir"
-  "B10_H32_L24576_D128|fixed_block_size.json|2d_mesh_torus_x12y10.mlir"
-  "B20_H32_L12288_D64|fixed_block_size.json|2d_mesh_torus_x12y10.mlir"
-  "B20_H32_L12288_D128|fixed_block_size.json|2d_mesh_torus_x12y10.mlir"
-  "B40_H32_L6144_D64|fixed_block_size.json|2d_mesh_torus_x12y10.mlir"
-  "B40_H32_L6144_D128|fixed_block_size.json|2d_mesh_torus_x12y10.mlir"
+  "B10_H32_L1024_D64|fixed_block_size.json|2d_mesh_torus_x2y10.mlir"
+  "B10_H32_L2048_D64|fixed_block_size.json|2d_mesh_torus_x4y10.mlir"
+  "B10_H32_L4096_D64|fixed_block_size.json|2d_mesh_torus_x8y10.mlir"
+  
+  "B20_H32_L1024_D64|fixed_block_size.json|2d_mesh_torus_x2y10.mlir"
+  "B20_H32_L2048_D64|fixed_block_size.json|2d_mesh_torus_x4y10.mlir"
+  "B20_H32_L4096_D64|fixed_block_size.json|2d_mesh_torus_x8y10.mlir"
+
+  "B30_H32_L1024_D64|fixed_block_size.json|2d_mesh_torus_x2y10.mlir"
+  "B30_H32_L2048_D64|fixed_block_size.json|2d_mesh_torus_x4y10.mlir"
+  "B30_H32_L4096_D64|fixed_block_size.json|2d_mesh_torus_x8y10.mlir"
 )
 
 for run_item in "${run_matrix_wh[@]}"; do
