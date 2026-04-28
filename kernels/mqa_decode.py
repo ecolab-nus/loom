@@ -19,7 +19,7 @@ import helion.language as hl
 from loom import LoomKernel
 from loom.loom_utils.kernel_size import resolve_kernel_shape_args
 
-from helion_mlir.custome_op import gather, broadcast  # registers the op with Helion's decorator API
+from helion_mlir.custom_op import gather, broadcast  # registers the op with Helion's decorator API
 
 
 def _mqa_decode(
