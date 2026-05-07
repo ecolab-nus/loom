@@ -56,6 +56,7 @@ def _mamba_chunk_scan(
     block_m = hl.register_block_size(chunk_size)
     block_n = hl.register_block_size(headdim)
     block_k = hl.register_block_size(64, 64)
+    #dstate = hl.specialize(dstate)
 
     assert cb.shape == (batch, nchunks, ngroups, chunk_size, chunk_size)
     assert x.shape == (batch, seqlen, nheads, headdim)
@@ -64,6 +65,8 @@ def _mamba_chunk_scan(
     assert C.shape == (batch, seqlen, ngroups, dstate)
     assert prev_states.shape == (batch, nchunks, nheads, headdim, dstate)
     assert D.shape == (nheads,)
+    x = x.transpose(1, 2)
+    C = C.transpose(1, 2)
 
     dtype = cb.dtype
     accum_dtype = torch.float16
@@ -90,14 +93,13 @@ def _mamba_chunk_scan(
         # tile_b: batch tile (size 1)
         # tile_c: chunk id tile (size 1)
         acc_o = hl.zeros([tile_m, tile_n], dtype=accum_dtype)
-
         # dA_cumsum_local_m: [tile_m]
         dA_cumsum_local_m = dA_cumsum[tile_b.begin, tile_h.begin, tile_c.begin, tile_m]
         dA_cumsum_local_m_bc_n = broadcast(
             dA_cumsum_local_m,
-            1,
-            [dA_cumsum_local_m.size(0), tile_n],
-        )
+            0,
+            [tile_n, dA_cumsum_local_m.size(0)],
+        ).T
 
         # scale_m_local: [tile_m, tile_n]
         scale_m_local = torch.exp(dA_cumsum_local_m_bc_n)
@@ -106,8 +108,8 @@ def _mamba_chunk_scan(
         # row index = tile_c * chunk_size + tile_m.index
         C_local = C[
             tile_b.begin,
-            tile_m.index + tile_c.begin * chunk_size,
             tile_h.begin // (nheads // ngroups),
+            tile_m.index + tile_c.begin * chunk_size,
             :,
         ]
         # prev_states_local: [dstate, tile_b]
@@ -133,14 +135,10 @@ def _mamba_chunk_scan(
             ]
             dA_cumsum_local_m_bc_k = broadcast(
                 dA_cumsum_local_m,
-                1,
-                [dA_cumsum_local_m.size(0), tile_k],
-            )
-            dA_cumsum_local_k = broadcast(
-                dA_cumsum_local_k,
                 0,
-                [tile_m, dA_cumsum_local_k.size(0)],
-            )
+                [tile_k, dA_cumsum_local_m.size(0)],
+            ).T
+            dA_cumsum_local_k = broadcast(dA_cumsum_local_k, 0, [tile_m, dA_cumsum_local_k.size(0)])
             # broadcast to [tile_m, tile_k]
             cb_local *= torch.exp(dA_cumsum_local_m_bc_k - dA_cumsum_local_k)
             # dt_local: [tile_k]
@@ -148,12 +146,14 @@ def _mamba_chunk_scan(
             # dt_local[None, :]: [1, tile_k], broadcast over tile_m axis
             dt_local = broadcast(dt_local, 0, [tile_m, dt_local.size(0)])
             cb_local *= dt_local
-
+            # Yet not support sparse matmul
+            # pred = (tile_m.index + 0)[:, None] >= (tile_k.index + 0)[None, :]
+            # cb_local = torch.where(pred, cb_local, torch.zeros_like(cb_local))
             # x_local: [tile_k, tile_n]
             x_local = x[
                 tile_b.begin,
-                tile_c.begin * chunk_size + tile_k.index,
                 tile_h.begin,
+                tile_c.begin * chunk_size + tile_k.index,
                 tile_n,
             ]
             # hl.dot([tile_m, tile_k], [tile_k, tile_n]) -> [tile_m, tile_n]
@@ -163,20 +163,13 @@ def _mamba_chunk_scan(
         D_local = D[tile_h.begin]
         # x_residual: [tile_m, tile_n]
         x_residual = x[
-            tile_b.begin,
-            tile_c.begin * chunk_size + tile_m.index,
-            tile_h.begin,
-            tile_n,
+            tile_b.begin, tile_h.begin, tile_c.begin * chunk_size + tile_m.index, tile_n
         ]
         # D_local scalar broadcasts to [tile_m, tile_n]
         acc_o += x_residual * D_local
-
         # out[...] tile: [tile_m, tile_n]
         out_[
-            tile_b.begin,
-            tile_c.begin * chunk_size + tile_m.index,
-            tile_h.begin,
-            tile_n,
+            tile_b.begin, tile_h.begin, tile_c.begin * chunk_size + tile_m.index, tile_n
         ] = acc_o.to(dtype=dtype)
 
     return out_
