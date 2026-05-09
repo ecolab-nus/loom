@@ -1,3 +1,31 @@
+def prepare_mamba2_chunk_scan_x(x: torch.Tensor) -> torch.Tensor:
+    """
+    Match the layout Helion uses after x.transpose(1, 2).
+
+    Input:
+        x: (batch, seqlen, nheads, headdim)
+
+    Return:
+        x_t: (batch, nheads, seqlen, headdim)
+    """
+
+    return x.transpose(1, 2).contiguous()
+
+
+def prepare_mamba2_chunk_scan_C(C: torch.Tensor) -> torch.Tensor:
+    """
+    Match the layout Helion uses after C.transpose(1, 2).
+
+    Input:
+        C: (batch, seqlen, ngroups, dstate)
+
+    Return:
+        C_t: (batch, ngroups, seqlen, dstate)
+    """
+
+    return C.transpose(1, 2).contiguous()
+
+
 def prepare_mamba2_chunk_scan_prev_states(prev_states: torch.Tensor) -> torch.Tensor:
     """
     Match the layout Helion uses before entering the tiled loop.
@@ -26,7 +54,15 @@ def prepare_mamba2_chunk_scan_inputs(
 ) -> tuple[torch.Tensor, ...]:
     """Prepare host tensors for the TTNN compute-only kernel."""
 
-    return (cb, x, dt, dA, C, prepare_mamba2_chunk_scan_prev_states(prev_states), D)
+    return (
+        cb,
+        prepare_mamba2_chunk_scan_x(x),
+        dt,
+        dA,
+        prepare_mamba2_chunk_scan_C(C),
+        prepare_mamba2_chunk_scan_prev_states(prev_states),
+        D,
+    )
 
 
 def ttnn_mamba2_chunk_scan_compute_coarse_causal(
@@ -58,38 +94,48 @@ def ttnn_mamba2_chunk_scan_compute_coarse_causal(
 
     Assumptions:
         - chunk_size % block_size == 0
-        - m block size == k block size == block_size
+        - m block size == block_size
+        - k block size == 64, matching the Helion block_k registration
         - no fine-grained causal predicate m >= k
         - inputs are already TTNN device tensors
 
     Shapes:
         cb_tt:   (batch, nchunks, ngroups, chunk_size, chunk_size)
-        x_tt:    (batch, seqlen, nheads, headdim)
+        x_tt:    (batch, nheads, seqlen, headdim)
+                 Use prepare_mamba2_chunk_scan_x(x) before converting the
+                 tensor to TTNN.
         dt_tt:   (batch, nheads, nchunks, chunk_size)
         dA_tt:   (batch, nheads, nchunks, chunk_size)
-        C_tt:    (batch, seqlen, ngroups, dstate)
+        C_tt:    (batch, ngroups, seqlen, dstate)
+                 Use prepare_mamba2_chunk_scan_C(C) before converting the
+                 tensor to TTNN.
         prev_tt: (batch, nchunks, nheads, dstate, headdim)
                  Use prepare_mamba2_chunk_scan_prev_states(prev_states) before
                  converting the tensor to TTNN.
 
     Returns:
         outputs: list of TTNN tensors.
-        Each tensor has shape (1, 1, chunk_size, headdim).
+        Each tensor has shape (1, 1, chunk_size, headdim), representing one
+        output chunk in Helion's transposed output layout
+        (batch, nheads, seqlen, headdim).
     """
 
     assert nheads % ngroups == 0
     assert seqlen % chunk_size == 0
     assert chunk_size % block_size == 0
+    block_k = 64
+    assert chunk_size % block_k == 0
+    assert block_size % block_k == 0
 
     heads_per_group = nheads // ngroups
     outputs = []
 
     for b in range(batch):
-        for c in range(nchunks):
-            seq_start = c * chunk_size
+        for h in range(nheads):
+            g = h // heads_per_group
 
-            for h in range(nheads):
-                g = h // heads_per_group
+            for c in range(nchunks):
+                seq_start = c * chunk_size
 
                 # ------------------------------------------------------------
                 # 1. Previous-state contribution
@@ -97,8 +143,8 @@ def ttnn_mamba2_chunk_scan_compute_coarse_causal(
 
                 C_local = tt_slice(
                     C_tt,
-                    [b, seq_start, g, 0],
-                    [b + 1, seq_start + chunk_size, g + 1, dstate],
+                    [b, g, seq_start, 0],
+                    [b + 1, g + 1, seq_start + chunk_size, dstate],
                 )
                 C_local = ttnn.reshape(
                     C_local,
@@ -139,8 +185,8 @@ def ttnn_mamba2_chunk_scan_compute_coarse_causal(
                 # 2. Intra-chunk scan contribution
                 #
                 # Coarse causal:
-                #   for each m-block:
-                #       accumulate k-blocks from 0 to current m-block
+                #   for each block_size-wide m-block:
+                #       accumulate 64-wide k-blocks from 0 to current m-block
                 #
                 # No fine-grained:
                 #   pred = m >= k
@@ -153,8 +199,8 @@ def ttnn_mamba2_chunk_scan_compute_coarse_causal(
 
                     acc_scan_m = None
 
-                    for k0 in range(0, m1, block_size):
-                        k1 = k0 + block_size
+                    for k0 in range(0, m1, block_k):
+                        k1 = k0 + block_k
 
                         cb_mk = tt_slice(
                             cb_tt,
@@ -163,7 +209,7 @@ def ttnn_mamba2_chunk_scan_compute_coarse_causal(
                         )
                         cb_mk = ttnn.reshape(
                             cb_mk,
-                            (1, 1, block_size, block_size),
+                            (1, 1, block_size, block_k),
                         )
 
                         dA_m = tt_slice(
@@ -183,7 +229,7 @@ def ttnn_mamba2_chunk_scan_compute_coarse_causal(
                         )
                         dA_k = ttnn.reshape(
                             dA_k,
-                            (1, 1, 1, block_size),
+                            (1, 1, 1, block_k),
                         )
 
                         dt_k = tt_slice(
@@ -193,7 +239,7 @@ def ttnn_mamba2_chunk_scan_compute_coarse_causal(
                         )
                         dt_k = ttnn.reshape(
                             dt_k,
-                            (1, 1, 1, block_size),
+                            (1, 1, 1, block_k),
                         )
 
                         dA_diff = ttnn.sub(dA_m, dA_k)
@@ -204,12 +250,12 @@ def ttnn_mamba2_chunk_scan_compute_coarse_causal(
 
                         x_k = tt_slice(
                             x_tt,
-                            [b, seq_start + k0, h, 0],
-                            [b + 1, seq_start + k1, h + 1, headdim],
+                            [b, h, seq_start + k0, 0],
+                            [b + 1, h + 1, seq_start + k1, headdim],
                         )
                         x_k = ttnn.reshape(
                             x_k,
-                            (1, 1, block_size, headdim),
+                            (1, 1, block_k, headdim),
                         )
 
                         partial = ttnn.matmul(
@@ -234,8 +280,8 @@ def ttnn_mamba2_chunk_scan_compute_coarse_causal(
 
                 x_local = tt_slice(
                     x_tt,
-                    [b, seq_start, h, 0],
-                    [b + 1, seq_start + chunk_size, h + 1, headdim],
+                    [b, h, seq_start, 0],
+                    [b + 1, h + 1, seq_start + chunk_size, headdim],
                 )
                 x_local = ttnn.reshape(
                     x_local,
@@ -277,17 +323,23 @@ def ttnn_mamba2_chunk_scan_compute(
     Inputs are already TTNN device tensors.
 
     cb_tt:   (batch, nchunks, ngroups, chunk_size, chunk_size)
-    x_tt:    (batch, seqlen, nheads, headdim)
+    x_tt:    (batch, nheads, seqlen, headdim)
+             Use prepare_mamba2_chunk_scan_x(x) before converting the tensor
+             to TTNN.
     dt_tt:   (batch, nheads, nchunks, chunk_size)
     dA_tt:   (batch, nheads, nchunks, chunk_size)
-    C_tt:    (batch, seqlen, ngroups, dstate)
+    C_tt:    (batch, ngroups, seqlen, dstate)
+             Use prepare_mamba2_chunk_scan_C(C) before converting the tensor
+             to TTNN.
     prev_tt: (batch, nchunks, nheads, dstate, headdim)
              Use prepare_mamba2_chunk_scan_prev_states(prev_states) before
              converting the tensor to TTNN.
 
     Returns:
         outputs: list of TTNN tensors.
-        Each tensor has shape (1, 1, chunk_size, headdim).
+        Each tensor has shape (1, 1, chunk_size, headdim), representing one
+        output chunk in Helion's transposed output layout
+        (batch, nheads, seqlen, headdim).
 
     Note:
         This function intentionally does not call:
@@ -306,24 +358,24 @@ def ttnn_mamba2_chunk_scan_compute(
     outputs = []
 
     for b in range(batch):
-        for c in range(nchunks):
-            seq_start = c * chunk_size
+        for h in range(nheads):
+            g = h // heads_per_group
 
-            for h in range(nheads):
-                g = h // heads_per_group
+            for c in range(nchunks):
+                seq_start = c * chunk_size
 
                 # ------------------------------------------------------------
                 # 1. Previous-state contribution
                 #
                 # acc_prev[m, p] =
-                #   sum_s C[b, seq_start + m, g, s]
+                #   sum_s C_T[b, g, seq_start + m, s]
                 #       * prev_states_T[b, c, h, s, p]
                 # ------------------------------------------------------------
 
                 C_local = tt_slice(
                     C_tt,
-                    [b, seq_start, g, 0],
-                    [b + 1, seq_start + chunk_size, g + 1, dstate],
+                    [b, g, seq_start, 0],
+                    [b + 1, g + 1, seq_start + chunk_size, dstate],
                 )
                 C_local = ttnn.reshape(
                     C_local,
@@ -416,8 +468,8 @@ def ttnn_mamba2_chunk_scan_compute(
 
                 x_local = tt_slice(
                     x_tt,
-                    [b, seq_start, h, 0],
-                    [b + 1, seq_start + chunk_size, h + 1, headdim],
+                    [b, h, seq_start, 0],
+                    [b + 1, h + 1, seq_start + chunk_size, headdim],
                 )
                 x_local = ttnn.reshape(
                     x_local,
