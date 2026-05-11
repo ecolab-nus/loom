@@ -1,3 +1,4 @@
+<img src="assets/loom-logo.svg" alt="Loom Logo" width="250">
 # Loom Monorepo
 
 Loom is an end-to-end compilation pipeline for ML kernels targeting spatial hardware architectures. It takes high-level kernel descriptions (written in [Helion](https://github.com/pytorch-labs/helion)) and compiles them through a multi-stage pipeline — MLIR lowering, dataflow exploration, symbolic architecture evaluation, and SMT-based block-size optimization — to produce optimized, bufferized MLIR ready for code generation.
