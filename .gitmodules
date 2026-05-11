@@ -1,12 +1,12 @@
 [submodule "third_party/loom-dataflow"]
 	path = third_party/loom-dataflow
-	url = https://github.com/ecolab-nus/loom-dataflow.git
+	url = ../loom-dataflow.git
 	branch = feature/symbolic
 [submodule "third_party/helion-mlir"]
 	path = third_party/helion-mlir
-	url = https://github.com/ecolab-nus/helion-mlir.git
+	url = ../helion-mlir.git
 	branch = main
 [submodule "third_party/loom-mlar"]
 	path = third_party/loom-mlar
-	url = https://github.com/ecolab-nus/loom-mlar.git
+	url = ../loom-mlar.git
 	branch = main
