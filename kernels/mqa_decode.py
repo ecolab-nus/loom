@@ -2,7 +2,7 @@
 
 Standalone CLI script. Run from the repo root:
 
-    python kernels/mqa_decode_wh/H32_L4096_D64.py --config kernels/config_files/mqa_decode_wh/H32_L4096_D64.json --njobs 1 --debug
+    python kernels/mqa_decode.py --config kernels/config_files/mqa_decode.json --njobs 8 --debug --optimal-only
 
 This script inherits the full Loom CLI and pipeline from LoomKernel.
 To write your own kernel, copy this file, replace the kernel body
