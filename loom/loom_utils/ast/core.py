@@ -86,7 +86,9 @@ class Mul(BinaryOp):
 @dataclass
 class Div(BinaryOp):
     def eval(self, env: dict[str, int]) -> int:
-        return self.left.eval(env) // self.right.eval(env)
+        left = self.left.eval(env)
+        right = self.right.eval(env)
+        return (left + right - 1) // right
     def __str__(self) -> str:
         return f"({self.left} / {self.right})"
 
