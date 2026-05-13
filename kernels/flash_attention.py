@@ -9,12 +9,17 @@ To write your own kernel, copy this file, replace the kernel body
 and bind_args tensors, and keep the __main__ block unchanged.
 """
 
+from __future__ import annotations
+
 import math
+import sys
+
 import torch
 import helion
 import helion.language as hl
 
 from loom import LoomKernel
+from loom.loom_utils.kernel_size import resolve_kernel_shape_args
 from helion_mlir.custom_op import broadcast
 
 
@@ -82,6 +87,16 @@ class FlashAttention(LoomKernel):
         },
     )(_flash__attention)
 
+    def __init__(self, shape: dict[str, int] | None = None) -> None:
+        if shape:
+            cls = type(self)
+            key_to_attr = {
+                "D": "d",
+            }
+            for key, value in shape.items():
+                attr = key_to_attr.get(key, key)
+                setattr(cls, attr, value)
+
     @classmethod
     def bind_args(cls) -> tuple:
         """Return concrete input tensors that define B, L, d at MLIR-gen time."""
@@ -92,4 +107,11 @@ class FlashAttention(LoomKernel):
 
 
 if __name__ == "__main__":
-    FlashAttention.run()
+    try:
+        shape, normalized_argv = resolve_kernel_shape_args(sys.argv)
+    except ValueError as exc:
+        raise SystemExit(str(exc)) from exc
+
+    sys.argv = normalized_argv
+    kernel = FlashAttention(shape)
+    kernel.run()

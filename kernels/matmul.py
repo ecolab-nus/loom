@@ -9,11 +9,16 @@ To write your own kernel, copy this file, replace the kernel body
 and bind_args tensors, and keep the __main__ block unchanged.
 """
 
+from __future__ import annotations
+
+import sys
+
 import torch
 import helion
 import helion.language as hl
 
 from loom import LoomKernel
+from loom.loom_utils.kernel_size import resolve_kernel_shape_args
 
 
 def _matmul(x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
@@ -58,6 +63,12 @@ class Matmul(LoomKernel):
         },
     )(_matmul)
 
+    def __init__(self, shape: dict[str, int] | None = None) -> None:
+        if shape:
+            cls = type(self)
+            for key, value in shape.items():
+                setattr(cls, key, value)
+
     @classmethod
     def bind_args(cls) -> tuple:
         """Return concrete input tensors that define M, K, N at MLIR-gen time."""
@@ -67,4 +78,11 @@ class Matmul(LoomKernel):
 
 
 if __name__ == "__main__":
-    Matmul.run()
+    try:
+        shape, normalized_argv = resolve_kernel_shape_args(sys.argv)
+    except ValueError as exc:
+        raise SystemExit(str(exc)) from exc
+
+    sys.argv = normalized_argv
+    kernel = Matmul(shape)
+    kernel.run()
