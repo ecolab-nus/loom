@@ -70,9 +70,11 @@ class FlashAttention(LoomKernel):
 
     kernel_name = "Flash Attention"
 
-    B: int = 256
+    B: int = 2
     L: int = 4096
-    d: int = 128
+    H: int = 128
+    d: int = int(1024 * 64 / H)
+    _logical_B: int = B
 
     assume_divisible_tiles = True
 
@@ -88,18 +90,22 @@ class FlashAttention(LoomKernel):
     )(_flash__attention)
 
     def __init__(self, shape: dict[str, int] | None = None) -> None:
+        cls = type(self)
+        logical_b = cls._logical_B
         if shape:
-            cls = type(self)
-            key_to_attr = {
-                "D": "d",
-            }
             for key, value in shape.items():
-                attr = key_to_attr.get(key, key)
-                setattr(cls, attr, value)
+                if key == "B":
+                    logical_b = value
+                else:
+                    setattr(cls, key, value)
+
+        cls._logical_B = logical_b
+        cls.d = int(1024 * 64 / cls.H)
+        cls.B = logical_b * cls.H
 
     @classmethod
     def bind_args(cls) -> tuple:
-        """Return concrete input tensors that define B, L, d at MLIR-gen time."""
+        """Return concrete input tensors that define B*H, L, d at MLIR-gen time."""
         q = torch.randn([cls.B, cls.L, cls.d], dtype=torch.float16)
         k = torch.randn([cls.B, cls.L, cls.d], dtype=torch.float16)
         v = torch.randn([cls.B, cls.L, cls.d], dtype=torch.float16)
