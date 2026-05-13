@@ -9,6 +9,12 @@ def multiples_of_32_range(lo: int, hi: int) -> list[int]:
     return list(range(start, hi + 1, 32))
 
 
+def aligned_range(ub: int, alignment: int = 1) -> list[int]:
+    """Return positive integers <= ub that are multiples of alignment."""
+    alignment = max(1, alignment)
+    return list(range(alignment, ub + 1, alignment))
+
+
 def parse_user_block_sizes(block_sizes: dict[str, dict]) -> dict[str, list[int]]:
     """Convert user-provided lb/ub bounds to domain lists for each symbol."""
     return {
@@ -18,8 +24,8 @@ def parse_user_block_sizes(block_sizes: dict[str, dict]) -> dict[str, list[int]]
 
 
 def derive_domains_from_etg(variants: list[dict]) -> dict[str, list[int]]:
-    """Derive symbol domains from natural_ub embedded in ETG metadata."""
-    bounds: dict[str, dict] = {}
+    """Derive aligned symbol domains from ETG metadata."""
+    domains: dict[str, list[int]] = {}
     for variant in variants:
         for sym, info in (
             variant.get("constraint_scope", {})
@@ -27,9 +33,14 @@ def derive_domains_from_etg(variants: list[dict]) -> dict[str, list[int]]:
             .get("symbols", {})
             .items()
         ):
-            if isinstance(info, dict) and "natural_ub" in info and sym not in bounds:
-                bounds[sym] = {"lb": 32, "ub": int(info["natural_ub"])}
-    return parse_user_block_sizes(bounds)
+            if not isinstance(info, dict) or "natural_ub" not in info or sym in domains:
+                continue
+
+            domains[sym] = aligned_range(
+                ub=int(info["natural_ub"]),
+                alignment=int(info.get("alignment", 1)),
+            )
+    return domains
 
 
 def get_variant_name(variant: dict, index: int) -> str:
