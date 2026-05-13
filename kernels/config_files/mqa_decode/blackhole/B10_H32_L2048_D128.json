@@ -1,5 +1,5 @@
 {
-  "output_path": "test/mqa_decode/bh_cap/B30_H32_L2048_D64",
+  "output_path": "test/mqa_decode/bh_cap/B10_H32_L2048_D64",
   "hw_spec": "third_party/loom-mlar/tests/2d_mesh/2d_mesh_torus_x4y10.mlir",
   "assigned_block_size": {
     "ALL": {

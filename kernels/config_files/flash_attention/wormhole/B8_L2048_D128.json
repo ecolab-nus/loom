@@ -1,0 +1,1 @@
+{"output_path": "test/flash_attention/wormhole/B8_L2048_D128", "hw_spec": "third_party/loom-mlar/tests/2d_mesh/2d_mesh_torus.mlir", "assigned_block_size": {"ALL": {"tile_b": 1, "tile_m": 32, "tile_n": 32}}}
