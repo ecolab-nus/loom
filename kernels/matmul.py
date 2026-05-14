@@ -33,7 +33,7 @@ def _matmul(x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
     for tile_m, tile_n in hl.tile([m, n]):
         acc = hl.zeros([tile_m, tile_n], dtype=torch.float16)
         for tile_k in hl.tile(k):
-            acc = torch.addmm(acc, x[tile_m, tile_k], y[tile_k, tile_n])
+            acc = hl.dot(x[tile_m, tile_k], y[tile_k, tile_n], acc=acc)
         out_[tile_m, tile_n] = acc
     return out_
 
