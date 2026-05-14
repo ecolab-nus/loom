@@ -3,14 +3,16 @@
 The ETG uses a nested for_loop_block tree structure:
 
     variant.kernel_block
+      load_scope.stages[]     (DRAM -> L1 copies)
       compute_scope.stages[]
-        stage = { for_loop_block: {compute_scope, memory_scope, trip_count, ...} }  # sub-loop
+        stage = { for_loop_block: {load_scope, compute_scope, store_scope, trip_count, ...} }  # sub-loop
               | { Parallel: [{Sequential: {scenarios}}] }                            # leaf op
-      memory_scope.stages[]  (may be empty)
+      store_scope.stages[]    (L1 -> DRAM copies)
     variant.constraint_scope  (unchanged — drives hard constraints only)
 
 Cost model:
-    t_self(block) = IF(is_double_buffer==1, MAX(t_comp, t_mem), t_comp + t_mem)
+    t_body(block) = t_compute + t_store
+    t_self(block) = IF(is_double_buffer==1, MAX(t_load, t_body), t_load + t_body)
     stage cost when the stage is a for_loop_block = t_self(block) * trip_count
     stages within one scope are sequential → summed
     siblings within one Parallel node execute concurrently → MAX'd
@@ -45,9 +47,11 @@ def _block_time_ast(block: dict, has_db: bool) -> Expr:
     The caller is responsible for multiplying by trip_count when this block is
     consumed as a stage of a parent scope.
     """
+    t_load = _scope_time_ast(block["load_scope"], has_db)
     t_comp = _scope_time_ast(block["compute_scope"], has_db)
-    t_mem  = _scope_time_ast(block["memory_scope"],  has_db)
-    return _combine_double_buffer(t_comp, t_mem, has_db)
+    t_store = _scope_time_ast(block["store_scope"], has_db)
+    t_body = Add([t_comp, t_store])
+    return _combine_double_buffer(t_load, t_body, has_db)
 
 
 def _scope_time_ast(scope: dict, has_db: bool) -> Expr:
@@ -76,11 +80,12 @@ def _stage_time_ast(stage: dict, has_db: bool) -> Expr:
     raise ValueError(f"Unknown stage shape: keys={list(stage.keys())}")
 
 
-def _combine_double_buffer(t_comp: Expr, t_mem: Expr, has_db: bool) -> Expr:
-    t_max = Max([t_comp, t_mem])
+def _combine_double_buffer(t_load: Expr, t_body: Expr, has_db: bool) -> Expr:
+    t_sum = Add([t_load, t_body])
+    t_max = Max([t_load, t_body])
     if has_db:
-        return IfElse(Eq(Sym("is_double_buffer"), Const(1)), t_max, Add([t_comp, t_mem]))
-    return t_max
+        return IfElse(Eq(Sym("is_double_buffer"), Const(1)), t_max, t_sum)
+    return t_sum
 
 
 def _fold_scenarios(scenarios: list[dict]) -> Expr:

@@ -61,12 +61,15 @@ def _print_block(block: dict, assignments: dict, depth: int, p) -> int:
     """Recursively print a kernel_block or for_loop_block; return evaluated total cost."""
     indent = "  " * depth
 
+    t_load = _print_scope(block["load_scope"], assignments, depth, p)
     t_comp = _print_scope(block["compute_scope"], assignments, depth, p)
-    t_mem  = _print_scope(block["memory_scope"],  assignments, depth, p)
+    t_store = _print_scope(block["store_scope"], assignments, depth, p)
+    t_body = t_comp + t_store
 
     is_db = assignments.get("is_double_buffer", 0)
-    t_self = max(t_comp, t_mem) if is_db else (t_comp + t_mem)
-    p(f"{indent}T_comp={t_comp:,}  T_mem={t_mem:,}  "
+    t_self = max(t_load, t_body) if is_db else (t_load + t_body)
+    p(f"{indent}T_load={t_load:,}  T_compute={t_comp:,}  "
+      f"T_store={t_store:,}  T_compute_store={t_body:,}  "
       f"{'max' if is_db else 'sum'}={t_self:,} cycles")
     return t_self
 
