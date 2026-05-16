@@ -158,9 +158,12 @@ def run_step_3_solve(
     debug: bool,
     constraints_dir: Path,
     symbol_domains: dict[str, list[int]] | None = None,
-    optimal_only: bool = False,
+    topk: int | None = None,
 ) -> dict[str, Any]:
     """Step 3: CPMpy/CP-SAT solver (finds optimal block sizes)."""
+    if topk is not None and topk <= 0:
+        raise ValueError("topk must be a positive integer")
+
     logging.info("")
     logging.info("=" * 72)
     logging.info("STEP 3: SOLVER (CPMpy/CP-SAT)")
@@ -177,7 +180,7 @@ def run_step_3_solve(
             njobs=njobs,
             output_path=solver_log,
             symbol_domains=symbol_domains,
-            optimal_only=optimal_only,
+            topk=topk,
             debug=debug,
         )
 
@@ -229,7 +232,7 @@ def run_pipeline(
     debug: bool = False,
     symbol_domains: dict[str, list[int]] | None = None,
     assigned_block_size: dict[str, Any] | None = None,
-    optimal_only: bool = False,
+    topk: int | None = None,
 ) -> None:
     """Run the full Loom compilation pipeline.
 
@@ -255,8 +258,9 @@ def run_pipeline(
         Optional explicit block-size assignments to use directly for
         materialization. When provided as a non-empty dict, Step 1 runs with
         ``skip_etg=True`` and Steps 2/3 are skipped.
-    optimal_only:
-        Optional boolean to keep only the optimal candidates.
+    topk:
+        Optional positive integer limiting materialization to the top K
+        candidates by optimal time.
     """
     output_path = Path(output_path)
     ir_dir = output_path / "IRs"
@@ -297,7 +301,7 @@ def run_pipeline(
         block_size = run_step_3_solve(
             resolved_etg_path, njobs, debug, constraints_dir,
             symbol_domains=symbol_domains,
-            optimal_only=optimal_only,
+            topk=topk,
         )
 
     del etg_json_text
