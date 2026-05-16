@@ -12,7 +12,10 @@ from ..loom_utils.modeling import (
     print_breakdown, print_result_summary, print_mus,
 )
 from ..loom_utils.modeling import compute_total_time_ast
-from ..loom_utils.ast import parse_constraint
+from ..loom_utils.ast import (
+    build_l1_memory_constraint,
+    parse_constraint,
+)
 from .core.solver_context import SolverContext
 
 
@@ -33,10 +36,14 @@ def solve_variant(
         parse_constraint(c)
         for c in variant["constraint_scope"]["hard_constraints"]
     ]
+    memory_constraints_ast = [
+        build_l1_memory_constraint(variant["constraint_scope"]["metadata"])
+    ]
     t_total_ast = compute_total_time_ast(variant)
 
     # Add constraints and solve
     ctx.add_hard_constraints(hard_constraints_ast)
+    ctx.add_hard_constraints(memory_constraints_ast, label_prefix="memory_l1")
     ctx.add_iter_num_constraints(variant["constraint_scope"]["metadata"]["iter_num"])
     status, min_val, assignments = ctx.find_optimum(t_total_ast)
 
@@ -89,7 +96,14 @@ def run(
     completed = 0
     with ProcessPoolExecutor(max_workers=njobs) as pool:
         futures = {
-            pool.submit(solve_variant, v, i, total, domains, debug): i
+            pool.submit(
+                solve_variant,
+                v,
+                i,
+                total,
+                domains,
+                debug,
+            ): i
             for i, v in enumerate(variants)
         }
         for f in as_completed(futures):
@@ -154,7 +168,12 @@ def main():
     parser.add_argument("--output", help="Log file path")
     parser.add_argument("--optimal-only", action="store_true", help="Output only best")
     args = parser.parse_args()
-    run(input_path=args.input, njobs=args.njobs, output_path=args.output, optimal_only=args.optimal_only)
+    run(
+        input_path=args.input,
+        njobs=args.njobs,
+        output_path=args.output,
+        optimal_only=args.optimal_only,
+    )
 
 
 if __name__ == "__main__":

@@ -50,18 +50,22 @@ class SolverContext:
             bool_domains[name] = [0, 1]
         return bool_domains
 
-    def add_hard_constraints(self, constraints_ast: list[Constraint]) -> None:
+    def add_hard_constraints(
+        self,
+        constraints_ast: list[Constraint],
+        label_prefix: str = "hard",
+    ) -> None:
         """Resolve and add every hard constraint from AST nodes."""
         resolver = ExprResolver(self.symbol_map)
         for i, c in enumerate(constraints_ast):
             cp_c = resolver.resolve(c)
             if cp_c is not True:
                 self.model += cp_c
-                self._tracked_constraints.append((f"hard[{i}]", cp_c))
+                self._tracked_constraints.append((f"{label_prefix}[{i}]", cp_c))
         # Add any auxiliary constraints generated during resolution
         for j, aux in enumerate(resolver.aux_constraints):
             self.model += aux
-            self._tracked_constraints.append((f"hard_aux[{j}]", aux))
+            self._tracked_constraints.append((f"{label_prefix}_aux[{j}]", aux))
 
     @staticmethod
     def _flatten_div_chain(node: Div) -> tuple[Expr, list[Expr]]:
