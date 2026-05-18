@@ -2,7 +2,7 @@
 
 Standalone CLI script. Run from the repo root:
 
-    python kernels/flash_attention.py --config kernels/config_files/flash_attention.json --njobs 8 --debug --topk 1
+    python kernels/flash_attention.py --config kernels/config_files/flash_attention.json --njobs 8 --debug --optimal-only
 
 This script inherits the full Loom CLI and pipeline from LoomKernel.
 To write your own kernel, copy this file, replace the kernel body
