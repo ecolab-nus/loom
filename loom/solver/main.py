@@ -12,7 +12,10 @@ from ..loom_utils.modeling import (
     print_breakdown, print_result_summary, print_mus,
 )
 from ..loom_utils.modeling import compute_total_time_ast
-from ..loom_utils.ast import parse_constraint
+from ..loom_utils.ast import (
+    build_l1_memory_constraint,
+    parse_constraint,
+)
 from .core.solver_context import SolverContext
 
 
@@ -33,10 +36,14 @@ def solve_variant(
         parse_constraint(c)
         for c in variant["constraint_scope"]["hard_constraints"]
     ]
+    memory_constraints_ast = [
+        build_l1_memory_constraint(variant["constraint_scope"]["metadata"])
+    ]
     t_total_ast = compute_total_time_ast(variant)
 
     # Add constraints and solve
     ctx.add_hard_constraints(hard_constraints_ast)
+    ctx.add_hard_constraints(memory_constraints_ast, label_prefix="memory_l1")
     ctx.add_iter_num_constraints(variant["constraint_scope"]["metadata"]["iter_num"])
     status, min_val, assignments = ctx.find_optimum(t_total_ast)
 
@@ -75,9 +82,12 @@ def run(
     njobs: int = 1,
     output_path: Path | str | None = None,
     symbol_domains: dict[str, list[int]] | None = None,
-    optimal_only: bool = False,
+    topk: int | None = None,
     debug: bool = False,
 ) -> dict[str, dict[str, int] | None]:
+    if topk is not None and topk <= 0:
+        raise ValueError("topk must be a positive integer")
+
     variants = load_variants(input_path)
     total = len(variants)
     etg_domains = derive_domains_from_etg(variants)
@@ -89,7 +99,14 @@ def run(
     completed = 0
     with ProcessPoolExecutor(max_workers=njobs) as pool:
         futures = {
-            pool.submit(solve_variant, v, i, total, domains, debug): i
+            pool.submit(
+                solve_variant,
+                v,
+                i,
+                total,
+                domains,
+                debug,
+            ): i
             for i, v in enumerate(variants)
         }
         for f in as_completed(futures):
@@ -107,17 +124,24 @@ def run(
     feasible = [r for r in results if r["status"] == "OPTIMAL"]
     best = min(feasible, key=lambda r: r["min_val"]) if feasible else None
 
-    # Apply optimal_only filtering: mark non-best OPTIMAL candidates as omitted
-    omitted_by_optimal_only: set[int] = set()
-    if optimal_only and best is not None:
-        for r in results:
-            if r["status"] == "OPTIMAL" and r["min_val"] > best["min_val"]:
-                omitted_by_optimal_only.add(r["index"])
+    topk_filter = _select_topk(feasible, topk)
+    omitted_by_topk = topk_filter["omitted"]
+    tied_omitted_by_topk = topk_filter["tied_omitted"]
+    tied_omitted_indices = {r["index"] for r in tied_omitted_by_topk}
+    if tied_omitted_by_topk:
+        print("\nTOPK TIE OMITTED")
+        print(
+            f"  topk={topk}, cutoff T={topk_filter['cutoff_min_val']:,} cycles, "
+            f"kept={topk_filter['kept_count']}, omitted_tied={len(tied_omitted_by_topk)}"
+        )
+        for r in sorted(tied_omitted_by_topk, key=lambda item: item["index"]):
+            vname = get_variant_name(r["variant"], r["index"])
+            print(f"  [{r['index']:3d}/{total - 1}] {vname}  T={r['min_val']:,} cycles")
 
     block_sizes = {
         get_variant_name(r["variant"], r["index"]): (
             dict(r["assignments"])
-            if r["status"] == "OPTIMAL" and r["index"] not in omitted_by_optimal_only
+            if r["status"] == "OPTIMAL" and r["index"] not in omitted_by_topk
             else None
         )
         for r in results
@@ -131,8 +155,11 @@ def run(
             idx = r["index"] + 1
             if r["status"] != "OPTIMAL":
                 omit_lines.append(f"  [{idx:3d}/{total}] {vname}  OMITTED: no feasible solution ({r['status']})")
-            elif r["index"] in omitted_by_optimal_only:
-                omit_lines.append(f"  [{idx:3d}/{total}] {vname}  OMITTED: non global optimal (T={r['min_val']:,} cycles)")
+            elif r["index"] in omitted_by_topk:
+                if r["index"] in tied_omitted_indices:
+                    omit_lines.append(f"  [{idx:3d}/{total}] {vname}  OMITTED: tied at topk cutoff (T={r['min_val']:,} cycles)")
+                else:
+                    omit_lines.append(f"  [{idx:3d}/{total}] {vname}  OMITTED: outside topk={topk} (T={r['min_val']:,} cycles)")
         if omit_lines:
             print("\nOMIT SUMMARY:")
             for line in omit_lines:
@@ -147,14 +174,54 @@ def run(
     return block_sizes
 
 
+def _select_topk(feasible: list[dict], topk: int | None) -> dict[str, Any]:
+    if topk is None or not feasible:
+        return {
+            "omitted": set(),
+            "tied_omitted": [],
+            "cutoff_min_val": None,
+            "kept_count": len(feasible),
+        }
+
+    top_results = sorted(feasible, key=lambda r: (r["min_val"], r["index"]))[:topk]
+    kept_by_topk = {r["index"] for r in top_results}
+    cutoff_min_val = top_results[-1]["min_val"] if top_results else None
+    omitted: set[int] = set()
+    tied_omitted = []
+    for r in feasible:
+        if r["index"] not in kept_by_topk:
+            omitted.add(r["index"])
+            if cutoff_min_val is not None and r["min_val"] == cutoff_min_val:
+                tied_omitted.append(r)
+
+    return {
+        "omitted": omitted,
+        "tied_omitted": tied_omitted,
+        "cutoff_min_val": cutoff_min_val,
+        "kept_count": len(top_results),
+    }
+
+
+def _positive_int(value: str) -> int:
+    parsed = int(value)
+    if parsed <= 0:
+        raise argparse.ArgumentTypeError("--topk must be a positive integer")
+    return parsed
+
+
 def main():
     parser = argparse.ArgumentParser(description="Find optimal block sizes using CPMpy/CP-SAT.")
     parser.add_argument("--input", required=True, help="Path to resolved ETG JSON")
     parser.add_argument("--njobs", type=int, default=1, help="Parallel workers")
     parser.add_argument("--output", help="Log file path")
-    parser.add_argument("--optimal-only", action="store_true", help="Output only best")
+    parser.add_argument("--topk", type=_positive_int, help="Output only the top K candidates")
     args = parser.parse_args()
-    run(input_path=args.input, njobs=args.njobs, output_path=args.output, optimal_only=args.optimal_only)
+    run(
+        input_path=args.input,
+        njobs=args.njobs,
+        output_path=args.output,
+        topk=args.topk,
+    )
 
 
 if __name__ == "__main__":

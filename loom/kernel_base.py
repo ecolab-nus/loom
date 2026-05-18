@@ -187,10 +187,11 @@ class LoomKernel:
             help="Enable detailed analysis and write intermediate IRs/logs.",
         )
         parser.add_argument(
-            "--optimal-only",
-            action="store_true",
-            default=False,
-            help="Keep only the optimal candidates and remove all others in the final output.",
+            "--topk",
+            type=_positive_int,
+            default=None,
+            metavar="K",
+            help="Keep only the top K candidates by optimal time in the final output.",
         )
         return parser
 
@@ -263,5 +264,12 @@ class LoomKernel:
             debug=args.debug,
             symbol_domains=symbol_domains,
             assigned_block_size=assigned_block_size if has_assigned_block_size else None,
-            optimal_only=args.optimal_only,
+            topk=args.topk,
         )
+
+
+def _positive_int(value: str) -> int:
+    parsed = int(value)
+    if parsed <= 0:
+        raise argparse.ArgumentTypeError("--topk must be a positive integer")
+    return parsed
