@@ -106,9 +106,9 @@ class FlashAttention(LoomKernel):
     @classmethod
     def bind_args(cls) -> tuple:
         """Return concrete input tensors that define B*H, L, d at MLIR-gen time."""
-        q = torch.randn([cls.B, cls.L, cls.d], dtype=torch.float16)
-        k = torch.randn([cls.B, cls.L, cls.d], dtype=torch.float16)
-        v = torch.randn([cls.B, cls.L, cls.d], dtype=torch.float16)
+        q = torch.empty([cls.B, cls.L, cls.d], dtype=torch.float16)
+        k = torch.empty([cls.B, cls.L, cls.d], dtype=torch.float16)
+        v = torch.empty([cls.B, cls.L, cls.d], dtype=torch.float16)
         return (q, k, v)
 
 

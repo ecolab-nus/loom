@@ -43,7 +43,7 @@ class CustomOp(LoomKernel):
     @classmethod
     def bind_args(cls) -> tuple:
         """Return concrete input tensors that define input at MLIR-gen time."""
-        input = torch.randn([cls.Size], dtype=torch.float16)
+        input = torch.empty([cls.Size], dtype=torch.float16)
         return (input)
 
 

@@ -120,9 +120,9 @@ class MQADecode(LoomKernel):
     @classmethod
     def bind_args(cls) -> tuple:
         """Return concrete input tensors that define B, H, L, D at MLIR-gen time."""
-        q = torch.randn([cls.B, 1, cls.H, cls.D], dtype=torch.float16)
-        k = torch.randn([cls.B, 1, cls.L, cls.D], dtype=torch.float16)
-        v = torch.randn([cls.B, 1, cls.L, cls.D], dtype=torch.float16)
+        q = torch.empty([cls.B, 1, cls.H, cls.D], dtype=torch.float16)
+        k = torch.empty([cls.B, 1, cls.L, cls.D], dtype=torch.float16)
+        v = torch.empty([cls.B, 1, cls.L, cls.D], dtype=torch.float16)
         return (q, k, v)
 
 

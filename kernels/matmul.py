@@ -72,8 +72,8 @@ class Matmul(LoomKernel):
     @classmethod
     def bind_args(cls) -> tuple:
         """Return concrete input tensors that define M, K, N at MLIR-gen time."""
-        x = torch.randn([cls.M, cls.K], device="cpu", dtype=torch.float16)
-        y = torch.randn([cls.K, cls.N], device="cpu", dtype=torch.float16)
+        x = torch.empty([cls.M, cls.K], device="cpu", dtype=torch.float16)
+        y = torch.empty([cls.K, cls.N], device="cpu", dtype=torch.float16)
         return (x, y)
 
 

@@ -214,19 +214,19 @@ class MambaChunkScan(LoomKernel):
         """Return concrete input tensors that define kernel shapes at MLIR-gen time."""
         nchunks = (cls.SEQLEN + cls.CHUNK_SIZE - 1) // cls.CHUNK_SIZE
 
-        cb = torch.randn(
+        cb = torch.empty(
             [cls.BATCH, nchunks, cls.NGROUPS, cls.CHUNK_SIZE, cls.CHUNK_SIZE],
             dtype=torch.float16,
         )
-        x = torch.randn([cls.BATCH, cls.SEQLEN, cls.NHEADS, cls.HEADDIM], dtype=torch.float16)
-        dt = torch.randn([cls.BATCH, cls.NHEADS, nchunks, cls.CHUNK_SIZE], dtype=torch.float16)
-        dA_cumsum = torch.randn([cls.BATCH, cls.NHEADS, nchunks, cls.CHUNK_SIZE], dtype=torch.float16)
-        C = torch.randn([cls.BATCH, cls.SEQLEN, cls.NGROUPS, cls.DSTATE], dtype=torch.float16)
-        prev_states = torch.randn(
+        x = torch.empty([cls.BATCH, cls.SEQLEN, cls.NHEADS, cls.HEADDIM], dtype=torch.float16)
+        dt = torch.empty([cls.BATCH, cls.NHEADS, nchunks, cls.CHUNK_SIZE], dtype=torch.float16)
+        dA_cumsum = torch.empty([cls.BATCH, cls.NHEADS, nchunks, cls.CHUNK_SIZE], dtype=torch.float16)
+        C = torch.empty([cls.BATCH, cls.SEQLEN, cls.NGROUPS, cls.DSTATE], dtype=torch.float16)
+        prev_states = torch.empty(
             [cls.BATCH, nchunks, cls.NHEADS, cls.HEADDIM, cls.DSTATE],
             dtype=torch.float16,
         )
-        D = torch.randn([cls.NHEADS], dtype=torch.float16)
+        D = torch.empty([cls.NHEADS], dtype=torch.float16)
 
         return (cb, x, dt, dA_cumsum, C, prev_states, D)
 
