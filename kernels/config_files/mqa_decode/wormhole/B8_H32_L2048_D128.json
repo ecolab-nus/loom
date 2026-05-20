@@ -1,6 +1,6 @@
 {
   "output_path": "test/mqa_decode/wh_cap/B8_H32_L2048_D128",
-  "hw_spec": "third_party/loom-mlar/tests/2d_mesh/2d_mesh_torus.mlir",
+  "hw_spec": "third_party/loom-mlar/tests/2d_mesh/2d_mesh_torus_x4y8.mlir",
   "assigned_block_size": {
     "ALL": {
       "tile_b": 1,
