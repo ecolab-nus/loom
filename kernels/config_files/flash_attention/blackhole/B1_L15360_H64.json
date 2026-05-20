@@ -1,0 +1,1 @@
+{"output_path": "test/flash_attention/blackhole/B1_L15360_H64", "hw_spec": "third_party/loom-mlar/tests/2d_mesh/2d_mesh_torus_x12y10.mlir", "assigned_block_size": {"_flash__attention__x12_y1y10__d0i1_d1i1_d2i0__f01__n_dim_x_level0_bc12_dim_x_level0_bc12_n": {"tile_b": 1, "tile_m": 32, "tile_n": 32}}}
