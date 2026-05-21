@@ -24,7 +24,8 @@ loom-monorepo/
 └── third_party/             # Git submodules
     ├── helion-mlir/         # Python: Helion kernel → MLIR frontend
     ├── loom-dataflow/       # C++/Python: MLIR exploration & materialization passes
-    └── loom-mlar/           # Rust: architecture modeling & symbolic evaluator
+    ├── loom-mlar/           # Rust: architecture modeling & symbolic evaluator
+    └── loom2ttkernel/       # C++: TileLoom-to-TTKernel lowering
 ```
 
 ## Compilation Pipeline
@@ -53,6 +54,10 @@ The core MLIR-backed compiler infrastructure for exploring hardware scale-out mo
 
 A Rust library implementing the Multi-Level Architecture Representation (MLAR) for composable, symbolic hardware description. It supports recursive architecture composition (Unit → Array → Graph), symbolic performance modeling with constraints, and generates an evaluator binary (`eval_core`) that accepts Schedule JSON on stdin and outputs evaluated performance scenarios.
 
+### loom2ttkernel
+
+A TileLoom-to-TTKernel lowering project. This third-party submodule is included in the repository, but `install-dev.sh` does not build it because it requires dependencies outside the default Loom developer setup. To build `loom2ttkernel`, first install [tt-metal](https://github.com/tenstorrent/tt-metal) and [tt-mlir](https://github.com/tenstorrent/tt-mlir).
+
 ## Quick Start
 
 ### Prerequisites
@@ -72,11 +77,11 @@ Create a Python 3.10 environment and run the one-click install script:
 conda create -n loom python=3.10 -y
 conda activate loom
 
-# Install everything
+# Install the core Loom pipeline
 bash install-dev.sh
 ```
 
-That's it. The install script handles git submodule initialization, dependency checks, and building/installing all subprojects in the correct order.
+That's it. The install script handles git submodule initialization, dependency checks, and building/installing the core pipeline subprojects in the correct order.
 
 If you have a custom MLIR installation, pass the path with `--mlir-dir`:
 
@@ -200,6 +205,6 @@ After a successful run, the output directory contains:
 
 | Script | Description |
 |--------|-------------|
-| `install-dev.sh` | One-click developer install — initializes submodules, runs pre-flight checks, and installs all subprojects in editable mode |
+| `install-dev.sh` | One-click developer install — initializes submodules, runs pre-flight checks, and installs the core pipeline subprojects in editable mode |
 | `scripts/preflight.sh` | Checks for all required dependencies (Python, pip, cmake, ninja, lld, C++ compiler, MLIR, Rust) and reports what is missing |
 | `scripts/build-mlar.sh` | Builds the `loom-mlar` eval_core evaluator binary via `cargo test` and copies it to `third_party/loom-mlar/bin/eval_core` |

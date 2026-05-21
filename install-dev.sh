@@ -1,7 +1,7 @@
 #!/bin/bash
 # One-click developer install for the Loom monorepo.
 #
-# Installs all subprojects in editable mode in the correct order:
+# Installs the core pipeline subprojects in editable mode in the correct order:
 #   1. Git submodule init/update
 #   2. Pre-flight dependency checks
 #   3. loom-dataflow  (C++ MLIR pipeline, triggers CMake build)

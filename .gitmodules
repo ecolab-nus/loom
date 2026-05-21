@@ -10,3 +10,7 @@
 	path = third_party/loom-mlar
 	url = ../loom-mlar.git
 	branch = main
+[submodule "third_party/loom2ttkernel"]
+	path = third_party/loom2ttkernel
+	url = ../loom2ttkernel.git
+	branch = main
