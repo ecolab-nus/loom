@@ -2,15 +2,14 @@
     "output_path": "test/mamba_chunk_scan_wh/L1024_N32_H128_G8_D128_C128",
     "hw_spec": "third_party/loom-mlar/tests/2d_mesh/2d_mesh_torus.mlir",
     "assigned_block_size": {
-        "_mamba_chunk_scan__x1x2x2x2_y2y4__d0i1_d1i1_d2i2_d3i0_d4i4_d5i3__f01234__dim_x_level1_bc2_dim_x_level1_bc2_dim_y_level0_bc2_n_n_n_n_dim_x_level3_bc8_dim_y_level0_bc2_n_n": {
+        "_mamba_chunk_scan__x2x4_y2y4__d0i0_d1i0_d2i1_d3i2__f012__n_n_dim_x_level0_bc2_dim_y_level0_bc2_n_n_n_n_dim_x_level1_bc8_dim_y_level1_bc8_n_n": {
             "is_double_buffer": 1,
-            "tile_m": 64,
+            "tile_m": 32,
             "tile_n": 32,
-            "tile_k": 64,
+            "tile_k": 32,
             "tile_h": 1,
             "tile_b": 1,
             "tile_c": 1
-            
         }
     }
 }
