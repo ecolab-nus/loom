@@ -83,94 +83,96 @@ def _mamba_chunk_scan(
 
     out_ = torch.empty_like(x)
 
-    for tile_h, tile_m, tile_n, tile_b, tile_c in hl.tile(
-        [nheads, chunk_size, headdim, batch, nchunks],
-        block_size=[1, block_m, block_n, 1, 1],
+    for tile_m, tile_n, tile_c in hl.tile(
+        [chunk_size, headdim, nchunks],
+        block_size=[block_m, block_n, 1],
     ):
-        # tile_h: head tile (size 1)
-        # tile_m: chunk-local sequence rows (M axis)
-        # tile_n: head-dim columns (N axis)
-        # tile_b: batch tile (size 1)
-        # tile_c: chunk id tile (size 1)
-        acc_o = hl.zeros([tile_m, tile_n], dtype=accum_dtype)
-        # dA_cumsum_local_m: [tile_m]
-        dA_cumsum_local_m = dA_cumsum[tile_b.begin, tile_h.begin, tile_c.begin, tile_m]
-        dA_cumsum_local_m_bc_n = broadcast(
-            dA_cumsum_local_m,
-            0,
-            [tile_n, dA_cumsum_local_m.size(0)],
-        ).T
+        for tile_b in hl.tile(batch):
+            for tile_h in hl.tile(nheads):
+                # tile_h: head tile (size 1)
+                # tile_m: chunk-local sequence rows (M axis)
+                # tile_n: head-dim columns (N axis)
+                # tile_b: batch tile (size 1)
+                # tile_c: chunk id tile (size 1)
+                acc_o = hl.zeros([tile_m, tile_n], dtype=accum_dtype)
+                # dA_cumsum_local_m: [tile_m]
+                dA_cumsum_local_m = dA_cumsum[tile_b.begin, tile_h.begin, tile_c.begin, tile_m]
+                dA_cumsum_local_m_bc_n = broadcast(
+                    dA_cumsum_local_m,
+                    0,
+                    [tile_n, dA_cumsum_local_m.size(0)],
+                ).T
 
-        # scale_m_local: [tile_m, tile_n]
-        scale_m_local = torch.exp(dA_cumsum_local_m_bc_n)
+                # scale_m_local: [tile_m, tile_n]
+                scale_m_local = torch.exp(dA_cumsum_local_m_bc_n)
 
-        # C_local: [tile_m, dstate]
-        # row index = tile_c * chunk_size + tile_m.index
-        C_local = C[
-            tile_b.begin,
-            tile_h.begin // (nheads // ngroups),
-            tile_m.index + tile_c.begin * chunk_size,
-            :,
-        ]
-        # prev_states_local: [dstate, tile_b]
-        prev_states_local = prev_states_T[
-            tile_b.begin, tile_c.begin, tile_h.begin, :, tile_n
-        ]
-        # hl.dot([tile_m, dstate], [dstate, tile_n]) -> [tile_m, tile_n]
-        acc_o = hl.dot(C_local, prev_states_local, acc=acc_o)
-        acc_o *= scale_m_local
+                # C_local: [tile_m, dstate]
+                # row index = tile_c * chunk_size + tile_m.index
+                C_local = C[
+                    tile_b.begin,
+                    tile_h.begin // (nheads // ngroups),
+                    tile_m.index + tile_c.begin * chunk_size,
+                    :,
+                ]
+                # prev_states_local: [dstate, tile_b]
+                prev_states_local = prev_states_T[
+                    tile_b.begin, tile_c.begin, tile_h.begin, :, tile_n
+                ]
+                # hl.dot([tile_m, dstate], [dstate, tile_n]) -> [tile_m, tile_n]
+                acc_o = hl.dot(C_local, prev_states_local, acc=acc_o)
+                acc_o *= scale_m_local
 
-        for tile_k in hl.tile((tile_m.id + 1) * block_m, block_size=block_k):
-            # cb_local: [tile_m, tile_k]
-            cb_local = cb[
-                tile_b.begin,
-                tile_c.begin,
-                tile_h.begin // (nheads // ngroups),
-                tile_m,
-                tile_k,
-            ]
-            # dA_cumsum_local_k: [tile_k]
-            dA_cumsum_local_k = dA_cumsum[
-                tile_b.begin, tile_h.begin, tile_c.begin, tile_k
-            ]
-            dA_cumsum_local_m_bc_k = broadcast(
-                dA_cumsum_local_m,
-                0,
-                [tile_k, dA_cumsum_local_m.size(0)],
-            ).T
-            dA_cumsum_local_k = broadcast(dA_cumsum_local_k, 0, [tile_m, dA_cumsum_local_k.size(0)])
-            # broadcast to [tile_m, tile_k]
-            cb_local *= torch.exp(dA_cumsum_local_m_bc_k - dA_cumsum_local_k)
-            # dt_local: [tile_k]
-            dt_local = dt[tile_b.begin, tile_h.begin, tile_c.begin, tile_k]
-            # dt_local[None, :]: [1, tile_k], broadcast over tile_m axis
-            dt_local = broadcast(dt_local, 0, [tile_m, dt_local.size(0)])
-            cb_local *= dt_local
-            # Yet not support sparse matmul
-            # pred = (tile_m.index + 0)[:, None] >= (tile_k.index + 0)[None, :]
-            # cb_local = torch.where(pred, cb_local, torch.zeros_like(cb_local))
-            # x_local: [tile_k, tile_n]
-            x_local = x[
-                tile_b.begin,
-                tile_h.begin,
-                tile_c.begin * chunk_size + tile_k.index,
-                tile_n,
-            ]
-            # hl.dot([tile_m, tile_k], [tile_k, tile_n]) -> [tile_m, tile_n]
-            acc_o = torch.addmm(acc_o, cb_local, x_local)
+                for tile_k in hl.tile((tile_m.id + 1) * block_m, block_size=block_k):
+                    # cb_local: [tile_m, tile_k]
+                    cb_local = cb[
+                        tile_b.begin,
+                        tile_c.begin,
+                        tile_h.begin // (nheads // ngroups),
+                        tile_m,
+                        tile_k,
+                    ]
+                    # dA_cumsum_local_k: [tile_k]
+                    dA_cumsum_local_k = dA_cumsum[
+                        tile_b.begin, tile_h.begin, tile_c.begin, tile_k
+                    ]
+                    dA_cumsum_local_m_bc_k = broadcast(
+                        dA_cumsum_local_m,
+                        0,
+                        [tile_k, dA_cumsum_local_m.size(0)],
+                    ).T
+                    dA_cumsum_local_k = broadcast(dA_cumsum_local_k, 0, [tile_m, dA_cumsum_local_k.size(0)])
+                    # broadcast to [tile_m, tile_k]
+                    cb_local *= torch.exp(dA_cumsum_local_m_bc_k - dA_cumsum_local_k)
+                    # dt_local: [tile_k]
+                    dt_local = dt[tile_b.begin, tile_h.begin, tile_c.begin, tile_k]
+                    # dt_local[None, :]: [1, tile_k], broadcast over tile_m axis
+                    dt_local = broadcast(dt_local, 0, [tile_m, dt_local.size(0)])
+                    cb_local *= dt_local
+                    # Yet not support sparse matmul
+                    # pred = (tile_m.index + 0)[:, None] >= (tile_k.index + 0)[None, :]
+                    # cb_local = torch.where(pred, cb_local, torch.zeros_like(cb_local))
+                    # x_local: [tile_k, tile_n]
+                    x_local = x[
+                        tile_b.begin,
+                        tile_h.begin,
+                        tile_c.begin * chunk_size + tile_k.index,
+                        tile_n,
+                    ]
+                    # hl.dot([tile_m, tile_k], [tile_k, tile_n]) -> [tile_m, tile_n]
+                    acc_o = torch.addmm(acc_o, cb_local, x_local)
 
-        # D_local: scalar
-        D_local = D[tile_h.begin]
-        # x_residual: [tile_m, tile_n]
-        x_residual = x[
-            tile_b.begin, tile_h.begin, tile_c.begin * chunk_size + tile_m.index, tile_n
-        ]
-        # D_local scalar broadcasts to [tile_m, tile_n]
-        acc_o += x_residual * D_local
-        # out[...] tile: [tile_m, tile_n]
-        out_[
-            tile_b.begin, tile_h.begin, tile_c.begin * chunk_size + tile_m.index, tile_n
-        ] = acc_o.to(dtype=dtype)
+                # D_local: scalar
+                D_local = D[tile_h.begin]
+                # x_residual: [tile_m, tile_n]
+                x_residual = x[
+                    tile_b.begin, tile_h.begin, tile_c.begin * chunk_size + tile_m.index, tile_n
+                ]
+                # D_local scalar broadcasts to [tile_m, tile_n]
+                acc_o += x_residual * D_local
+                # out[...] tile: [tile_m, tile_n]
+                out_[
+                    tile_b.begin, tile_h.begin, tile_c.begin * chunk_size + tile_m.index, tile_n
+                ] = acc_o.to(dtype=dtype)
 
     return out_
 
