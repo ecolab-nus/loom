@@ -1,1 +1,1 @@
-{"output_path": "test/matmul/blackhole/M256_N256_K16384", "hw_spec": "third_party/loom-mlar/tests/2d_mesh/2d_mesh_torus_x12y10.mlir", "assigned_block_size": {"_matmul__x12_y1y10__d0i1_d1i1_d2i0__f01__dim_x_level0_bc12_dim_y_level1_bc10_n": {"tile_m": 64, "tile_n": 64, "tile_k": 2048}}}
+{"output_path": "test/matmul/blackhole/M256_N256_K16384", "hw_spec": "third_party/loom-mlar/tests/2d_mesh/2d_mesh_torus_x4y4.mlir", "assigned_block_size": {"_matmul__x4_y1y4__d0i1_d1i1_d2i0__f01__dim_x_level0_bc4_dim_y_level1_bc4_n": {"tile_m": 64, "tile_n": 64, "tile_k": 2048}}}
