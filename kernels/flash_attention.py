@@ -47,17 +47,18 @@ def _flash__attention(
         for tile_n in hl.tile(v_view.size(1)):
             k = k_view[tile_b, :, tile_n]
             qk = torch.bmm(q, k)
-            m_ij = torch.maximum(m_i, torch.amax(qk, -1, keepdim=True) * qk_scale_dev)
+            qk = qk * qk_scale_dev
+            m_ij = torch.maximum(m_i, torch.amax(qk, -1, keepdim=True))
             m_ij_broad = broadcast(m_ij, 2, [m_ij.size(0), m_ij.size(1), tile_n])
-            qk = qk * qk_scale_dev - m_ij_broad
+            qk = qk - m_ij_broad
             p = torch.exp(qk)
-            l_ij = torch.sum(p, -1, keepdim=True)
             alpha = torch.exp(m_i - m_ij)
-            l_i = l_i * alpha + l_ij
-            acc = acc * alpha
             v = v_view[tile_b, tile_n, :]
             p = p.to(v.dtype)
-            acc = torch.baddbmm(acc, p, v)
+            acc = acc * alpha
+            acc = acc + torch.bmm(p, v)
+            l_ij = torch.sum(p, -1, keepdim=True)
+            l_i = l_i * alpha + l_ij
             m_i = m_ij
         m_i += torch.log(l_i)
         l_i_broadcast = broadcast(l_i, 2, [l_i.size(0), l_i.size(1), head_dim])
