@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import traceback
 from typing import Optional, Union
 
 import cpmpy as cp
@@ -143,7 +144,12 @@ class SolverContext:
         self.model.minimize(cp_obj)
         try:
             self.model.solve(solver="ortools")
-        except Exception:
+        except Exception as exc:
+            print(
+                "[CPMPY][MODEL_INVALID] Exception while solving with OR-Tools:",
+                f"{type(exc).__name__}: {exc}",
+            )
+            print(traceback.format_exc())
             return "MODEL_INVALID", None, None
 
         exit_status = self.model.status().exitstatus
