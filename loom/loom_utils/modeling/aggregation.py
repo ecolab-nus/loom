@@ -33,7 +33,7 @@ def compute_total_time_ast(variant: dict, *, scale_time_costs: bool = True) -> E
 
     Reads variant["kernel_block"] and recurses through the for_loop_block tree.
     variant["constraint_scope"] is consumed only for the is_double_buffer flag;
-    iter_num divisibility constraints are handled separately by SolverContext.
+    trip-count feasibility constraints are handled separately by SolverContext.
     """
     meta = variant["constraint_scope"]["metadata"]
     booleans_meta = meta.get("booleans", [])

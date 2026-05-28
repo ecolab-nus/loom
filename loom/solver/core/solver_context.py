@@ -84,23 +84,22 @@ class SolverContext:
         denoms.reverse()
         return current, denoms
 
-    def add_iter_num_constraints(self, iter_num: dict) -> None:
-        """Add divisibility and positivity constraints for each iter_num expression.
+    def add_trip_count_constraints(self, trip_count_exprs: list[dict]) -> None:
+        """Add no-oversize constraints for each loop trip-count expression.
 
         Flattens nested Div chains before resolving:
-          Div(Div(N, d0), d1)  →  N % (d0 * d1) == 0  and  d0 * d1 <= N
+          Div(Div(N, d0), d1)  ->  d0 * d1 <= N
 
         Calls _resolve_expr() directly on each non-Div leaf node to avoid the
         ceiling-division path that _resolve_expr() applies to Div nodes.
         """
-        raw_iters = [iter_num["seq_iter"]] + list(iter_num.get("temp_iter", []))
         resolver = ExprResolver(self.symbol_map)
 
-        for i, raw in enumerate(raw_iters):
+        for i, raw in enumerate(trip_count_exprs):
             node = parse_expr(raw)
             if not isinstance(node, Div):
                 raise ValueError(
-                    f"Expected top-level Div node in iter_num[{i}], "
+                    f"Expected top-level Div node in trip_count[{i}], "
                     f"got {type(node).__name__}: {node}"
                 )
 
@@ -116,12 +115,9 @@ class SolverContext:
             for d in denom_nodes[1:]:
                 denom_cp = denom_cp * resolver._resolve_expr(d)
 
-            div_c = num_cp % denom_cp == 0
-            pos_c = denom_cp <= num_cp
-            self.model += div_c
-            self.model += pos_c
-            self._tracked_constraints.append((f"iter_div[{i}]", div_c))
-            self._tracked_constraints.append((f"iter_pos[{i}]", pos_c))
+            no_oversize_c = denom_cp <= num_cp
+            self.model += no_oversize_c
+            self._tracked_constraints.append((f"trip_count[{i}]", no_oversize_c))
 
     def find_optimum(
         self,

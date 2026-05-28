@@ -44,7 +44,7 @@ def solve_variant(
     # Add constraints and solve
     ctx.add_hard_constraints(hard_constraints_ast)
     ctx.add_hard_constraints(memory_constraints_ast, label_prefix="memory_l1")
-    ctx.add_iter_num_constraints(variant["constraint_scope"]["metadata"]["iter_num"])
+    ctx.add_trip_count_constraints(_collect_trip_counts(variant["kernel_block"]))
     status, scaled_min_val, assignments = ctx.find_optimum(t_total_ast)
     min_val = None
     if assignments is not None:
@@ -65,6 +65,19 @@ def solve_variant(
         "assignments": assignments,
         "mus": mus,
     }
+
+
+def _collect_trip_counts(block: dict) -> list[dict]:
+    """Collect trip_count expressions from every for_loop_block in DFS order."""
+    trip_counts = []
+    for scope_name in ("load_scope", "compute_scope", "store_scope"):
+        for stage in block.get(scope_name, {}).get("stages", []):
+            if "for_loop_block" not in stage:
+                continue
+            loop_block = stage["for_loop_block"]
+            trip_counts.append(loop_block["trip_count"])
+            trip_counts.extend(_collect_trip_counts(loop_block))
+    return trip_counts
 
 
 def _write_detailed_log(
