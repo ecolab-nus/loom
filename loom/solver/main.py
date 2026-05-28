@@ -45,7 +45,11 @@ def solve_variant(
     ctx.add_hard_constraints(hard_constraints_ast)
     ctx.add_hard_constraints(memory_constraints_ast, label_prefix="memory_l1")
     ctx.add_iter_num_constraints(variant["constraint_scope"]["metadata"]["iter_num"])
-    status, min_val, assignments = ctx.find_optimum(t_total_ast)
+    status, scaled_min_val, assignments = ctx.find_optimum(t_total_ast)
+    min_val = None
+    if assignments is not None:
+        exact_total_ast = compute_total_time_ast(variant, scale_time_costs=False)
+        min_val = exact_total_ast.eval(assignments)
 
     mus = None
     if debug and status == "INFEASIBLE":
@@ -57,6 +61,7 @@ def solve_variant(
         "total": total,
         "status": status,
         "min_val": min_val,
+        "scaled_min_val": scaled_min_val,
         "assignments": assignments,
         "mus": mus,
     }
@@ -122,7 +127,7 @@ def run(
 
     # Determine global best among OPTIMAL candidates
     feasible = [r for r in results if r["status"] == "OPTIMAL"]
-    best = min(feasible, key=lambda r: r["min_val"]) if feasible else None
+    best = min(feasible, key=lambda r: r["scaled_min_val"]) if feasible else None
 
     topk_filter = _select_topk(feasible, topk)
     omitted_by_topk = topk_filter["omitted"]
@@ -183,15 +188,16 @@ def _select_topk(feasible: list[dict], topk: int | None) -> dict[str, Any]:
             "kept_count": len(feasible),
         }
 
-    top_results = sorted(feasible, key=lambda r: (r["min_val"], r["index"]))[:topk]
+    top_results = sorted(feasible, key=lambda r: (r["scaled_min_val"], r["index"]))[:topk]
     kept_by_topk = {r["index"] for r in top_results}
     cutoff_min_val = top_results[-1]["min_val"] if top_results else None
+    cutoff_scaled_min_val = top_results[-1]["scaled_min_val"] if top_results else None
     omitted: set[int] = set()
     tied_omitted = []
     for r in feasible:
         if r["index"] not in kept_by_topk:
             omitted.add(r["index"])
-            if cutoff_min_val is not None and r["min_val"] == cutoff_min_val:
+            if cutoff_scaled_min_val is not None and r["scaled_min_val"] == cutoff_scaled_min_val:
                 tied_omitted.append(r)
 
     return {

@@ -20,13 +20,15 @@ Cost model:
 
 from __future__ import annotations
 
-from ..ast import Expr, Const, Sym, Add, Mul, Max, IfElse, Switch, Eq, Top, parse_expr, parse_constraint
+from ..ast import Expr, Const, Sym, Add, Mul, Div, Max, IfElse, Switch, Eq, Top, parse_expr, parse_constraint
 
-# Large enough to never be chosen as the minimum.
-_INF = Const(2**31)
+TIME_COST_SCALE = 4
+
+_INF_CYCLES = 2**31
+_SCALED_INF = Const((_INF_CYCLES + TIME_COST_SCALE - 1) // TIME_COST_SCALE)
 
 
-def compute_total_time_ast(variant: dict) -> Expr:
+def compute_total_time_ast(variant: dict, *, scale_time_costs: bool = True) -> Expr:
     """Build the Pure Python AST for the total pipeline execution time.
 
     Reads variant["kernel_block"] and recurses through the for_loop_block tree.
@@ -38,41 +40,41 @@ def compute_total_time_ast(variant: dict) -> Expr:
     symbols_meta  = meta.get("symbols", {})
     has_db = ("is_double_buffer" in booleans_meta) or ("is_double_buffer" in symbols_meta)
 
-    return _block_time_ast(variant["kernel_block"], has_db)
+    return _block_time_ast(variant["kernel_block"], has_db, scale_time_costs)
 
 
-def _block_time_ast(block: dict, has_db: bool) -> Expr:
+def _block_time_ast(block: dict, has_db: bool, scale_time_costs: bool) -> Expr:
     """Cost of one block (kernel_block or for_loop_block), excluding its own trip_count.
 
     The caller is responsible for multiplying by trip_count when this block is
     consumed as a stage of a parent scope.
     """
-    t_load = _scope_time_ast(block["load_scope"], has_db)
-    t_comp = _scope_time_ast(block["compute_scope"], has_db)
-    t_store = _scope_time_ast(block["store_scope"], has_db)
+    t_load = _scope_time_ast(block["load_scope"], has_db, scale_time_costs)
+    t_comp = _scope_time_ast(block["compute_scope"], has_db, scale_time_costs)
+    t_store = _scope_time_ast(block["store_scope"], has_db, scale_time_costs)
     t_body = Add([t_comp, t_store])
     return _combine_double_buffer(t_load, t_body, has_db)
 
 
-def _scope_time_ast(scope: dict, has_db: bool) -> Expr:
+def _scope_time_ast(scope: dict, has_db: bool, scale_time_costs: bool) -> Expr:
     """Sum of stage times within one scope. Returns Const(0) for an empty scope."""
     stages = scope.get("stages", [])
     if not stages:
         return Const(0)
-    return Add([_stage_time_ast(s, has_db) for s in stages])
+    return Add([_stage_time_ast(s, has_db, scale_time_costs) for s in stages])
 
 
-def _stage_time_ast(stage: dict, has_db: bool) -> Expr:
+def _stage_time_ast(stage: dict, has_db: bool, scale_time_costs: bool) -> Expr:
     """Cost contribution of one stage entry."""
     if "for_loop_block" in stage:
         flb        = stage["for_loop_block"]
-        inner_cost = _block_time_ast(flb, has_db)
+        inner_cost = _block_time_ast(flb, has_db, scale_time_costs)
         trip       = parse_expr(flb["trip_count"])
         return Mul(trip, inner_cost)
 
     if "Parallel" in stage:
         par_times = [
-            _fold_scenarios(item["Sequential"]["scenarios"])
+            _fold_scenarios(item["Sequential"]["scenarios"], scale_time_costs)
             for item in stage["Parallel"]
         ]
         return par_times[0] if len(par_times) == 1 else Max(par_times)
@@ -88,19 +90,37 @@ def _combine_double_buffer(t_load: Expr, t_body: Expr, has_db: bool) -> Expr:
     return t_sum
 
 
-def _fold_scenarios(scenarios: list[dict]) -> Expr:
+def _fold_scenarios(scenarios: list[dict], scale_time_costs: bool) -> Expr:
     """Fold a scenarios list into a Switch (or bare expression for single-case)."""
     assert scenarios, "scenarios list must be non-empty"
 
     if len(scenarios) == 1:
         cond = parse_constraint(scenarios[0]["constraints"])
-        cost = parse_expr(scenarios[0]["time_cost"])
+        cost = _parse_time_cost(scenarios[0]["time_cost"], scale_time_costs)
         if isinstance(cond, Top):
             return cost
-        return Switch(cases=[(cond, cost)], default=_INF)
+        return Switch(cases=[(cond, cost)], default=_switch_default(scale_time_costs))
 
     cases = [
-        (parse_constraint(s["constraints"]), parse_expr(s["time_cost"]))
+        (
+            parse_constraint(s["constraints"]),
+            _parse_time_cost(s["time_cost"], scale_time_costs),
+        )
         for s in scenarios
     ]
-    return Switch(cases=cases, default=_INF)
+    return Switch(cases=cases, default=_switch_default(scale_time_costs))
+
+
+def _parse_time_cost(time_cost: object, scale_time_costs: bool) -> Expr:
+    """Parse scenario time cost in solver units while leaving ETG data untouched."""
+    parsed = parse_expr(time_cost)
+    if not scale_time_costs:
+        return parsed
+    return Div(parsed, Const(TIME_COST_SCALE))
+
+
+def _switch_default(scale_time_costs: bool) -> Expr:
+    """Large fallback value in the same units as the scenario cases."""
+    if scale_time_costs:
+        return _SCALED_INF
+    return Const(_INF_CYCLES)
