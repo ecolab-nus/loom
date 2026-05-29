@@ -9,11 +9,14 @@ from typing import Any, Optional
 from ..loom_utils.io import load_variants
 from ..loom_utils.modeling import (
     get_variant_name, derive_domains_from_etg,
-    print_breakdown, print_result_summary, print_mus,
+    print_breakdown, print_mus,
 )
-from ..loom_utils.modeling import compute_total_time_ast
+from ..loom_utils.modeling import TIME_COST_SCALE, compute_total_time_ast
 from ..loom_utils.ast import (
     build_l1_memory_constraint,
+    Const,
+    Div,
+    parse_expr,
     parse_constraint,
 )
 from .core.solver_context import SolverContext
@@ -46,10 +49,7 @@ def solve_variant(
     ctx.add_hard_constraints(memory_constraints_ast, label_prefix="memory_l1")
     ctx.add_trip_count_constraints(_collect_trip_counts(variant["kernel_block"]))
     status, scaled_min_val, assignments = ctx.find_optimum(t_total_ast)
-    min_val = None
-    if assignments is not None:
-        exact_total_ast = compute_total_time_ast(variant, scale_time_costs=False)
-        min_val = exact_total_ast.eval(assignments)
+    min_val = scaled_min_val
 
     mus = None
     if debug and status == "INFEASIBLE":
@@ -80,6 +80,10 @@ def _collect_trip_counts(block: dict) -> list[dict]:
     return trip_counts
 
 
+def _parse_solver_time_cost(time_cost: object):
+    return Div(parse_expr(time_cost), Const(TIME_COST_SCALE))
+
+
 def _write_detailed_log(
     results: list[dict], output_path: Path | str, total: int, debug: bool = False,
 ) -> None:
@@ -91,7 +95,16 @@ def _write_detailed_log(
                 if debug and r.get("mus"):
                     print_mus(vname, r["mus"], file=log)
             else:
-                print_result_summary(vname, r["assignments"], r["min_val"], r["index"], total, file=log)
+                print_breakdown(
+                    r["variant"],
+                    r["assignments"],
+                    r["min_val"],
+                    r["index"],
+                    total,
+                    file=log,
+                    cost_parser=_parse_solver_time_cost,
+                    unit="solver units",
+                )
                 print("-" * 72, file=log)
 
 
@@ -134,7 +147,7 @@ def run(
             vname = get_variant_name(res["variant"], res["index"])
             status = res["status"]
             if status == "OPTIMAL":
-                print(f"[{completed:3d}/{total}] {vname}  T={res['min_val']:,} cycles  OPTIMAL")
+                print(f"[{completed:3d}/{total}] {vname}  T={res['min_val']:,} solver units  OPTIMAL")
             else:
                 print(f"[{completed:3d}/{total}] {vname}  {status}")
 
@@ -149,12 +162,12 @@ def run(
     if tied_omitted_by_topk:
         print("\nTOPK TIE OMITTED")
         print(
-            f"  topk={topk}, cutoff T={topk_filter['cutoff_min_val']:,} cycles, "
+            f"  topk={topk}, cutoff T={topk_filter['cutoff_min_val']:,} solver units, "
             f"kept={topk_filter['kept_count']}, omitted_tied={len(tied_omitted_by_topk)}"
         )
         for r in sorted(tied_omitted_by_topk, key=lambda item: item["index"]):
             vname = get_variant_name(r["variant"], r["index"])
-            print(f"  [{r['index']:3d}/{total - 1}] {vname}  T={r['min_val']:,} cycles")
+            print(f"  [{r['index']:3d}/{total - 1}] {vname}  T={r['min_val']:,} solver units")
 
     block_sizes = {
         get_variant_name(r["variant"], r["index"]): (
@@ -175,9 +188,9 @@ def run(
                 omit_lines.append(f"  [{idx:3d}/{total}] {vname}  OMITTED: no feasible solution ({r['status']})")
             elif r["index"] in omitted_by_topk:
                 if r["index"] in tied_omitted_indices:
-                    omit_lines.append(f"  [{idx:3d}/{total}] {vname}  OMITTED: tied at topk cutoff (T={r['min_val']:,} cycles)")
+                    omit_lines.append(f"  [{idx:3d}/{total}] {vname}  OMITTED: tied at topk cutoff (T={r['min_val']:,} solver units)")
                 else:
-                    omit_lines.append(f"  [{idx:3d}/{total}] {vname}  OMITTED: outside topk={topk} (T={r['min_val']:,} cycles)")
+                    omit_lines.append(f"  [{idx:3d}/{total}] {vname}  OMITTED: outside topk={topk} (T={r['min_val']:,} solver units)")
         if omit_lines:
             print("\nOMIT SUMMARY:")
             for line in omit_lines:
@@ -188,7 +201,15 @@ def run(
 
     if best:
         print("\nGLOBAL BEST")
-        print_breakdown(best["variant"], best["assignments"], best["min_val"], best["index"], total)
+        print_breakdown(
+            best["variant"],
+            best["assignments"],
+            best["min_val"],
+            best["index"],
+            total,
+            cost_parser=_parse_solver_time_cost,
+            unit="solver units",
+        )
     return block_sizes
 
 

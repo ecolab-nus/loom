@@ -3,10 +3,12 @@
 
 from __future__ import annotations
 import sys
-from typing import TextIO
+from typing import Any, Callable, TextIO
 
 from ..ast import parse_expr, parse_constraint
 from .analysis import ConstraintAnalysis, ConstraintStatus
+
+CostParser = Callable[[Any], Any]
 
 
 def print_breakdown(
@@ -16,6 +18,8 @@ def print_breakdown(
     index: int,
     total: int,
     file: TextIO = None,
+    cost_parser: CostParser = parse_expr,
+    unit: str = "cycles",
 ) -> None:
     """Write a hierarchical timing breakdown for the given symbol assignments."""
     if file is None:
@@ -26,7 +30,7 @@ def print_breakdown(
 
     variant_name = variant.get("variant_name", "unknown")
     p(f"Variant [{index}/{total - 1}]: {variant_name}")
-    p(f"Optimal T_total: {min_val:,} cycles")
+    p(f"Optimal T_total: {min_val:,} {unit}")
     for sym, val in sorted(assignments.items()):
         if not sym.startswith("__"):
             p(f"  {sym} = {val}")
@@ -44,37 +48,55 @@ def print_breakdown(
     p()
 
     root = variant.get("kernel_block", variant)
-    _print_block(root, assignments, depth=1, p=p)
+    _print_block(root, assignments, depth=1, p=p, cost_parser=cost_parser, unit=unit)
 
-    p(f"  T_total = {min_val:,} cycles")
+    p(f"  T_total = {min_val:,} {unit}")
     p()
 
 
-def _eval_scenario(scenarios: list[dict], assignments: dict) -> tuple[int | None, int | None]:
+def _eval_scenario(
+    scenarios: list[dict],
+    assignments: dict,
+    cost_parser: CostParser,
+) -> tuple[int | None, int | None]:
     for si, scenario in enumerate(scenarios):
         if parse_constraint(scenario["constraints"]).eval(assignments):
-            return si, parse_expr(scenario["time_cost"]).eval(assignments)
+            return si, cost_parser(scenario["time_cost"]).eval(assignments)
     return None, None
 
 
-def _print_block(block: dict, assignments: dict, depth: int, p) -> int:
+def _print_block(
+    block: dict,
+    assignments: dict,
+    depth: int,
+    p,
+    cost_parser: CostParser,
+    unit: str,
+) -> int:
     """Recursively print a kernel_block or for_loop_block; return evaluated total cost."""
     indent = "  " * depth
 
-    t_load = _print_scope(block["load_scope"], assignments, depth, p)
-    t_comp = _print_scope(block["compute_scope"], assignments, depth, p)
-    t_store = _print_scope(block["store_scope"], assignments, depth, p)
+    t_load = _print_scope(block["load_scope"], assignments, depth, p, cost_parser, unit)
+    t_comp = _print_scope(block["compute_scope"], assignments, depth, p, cost_parser, unit)
+    t_store = _print_scope(block["store_scope"], assignments, depth, p, cost_parser, unit)
     t_body = t_comp + t_store
 
     is_db = assignments.get("is_double_buffer", 0)
     t_self = max(t_load, t_body) if is_db else (t_load + t_body)
     p(f"{indent}T_load={t_load:,}  T_compute={t_comp:,}  "
       f"T_store={t_store:,}  T_compute_store={t_body:,}  "
-      f"{'max' if is_db else 'sum'}={t_self:,} cycles")
+      f"{'max' if is_db else 'sum'}={t_self:,} {unit}")
     return t_self
 
 
-def _print_scope(scope: dict, assignments: dict, depth: int, p) -> int:
+def _print_scope(
+    scope: dict,
+    assignments: dict,
+    depth: int,
+    p,
+    cost_parser: CostParser,
+    unit: str,
+) -> int:
     """Print stages within one scope; return sum of stage costs."""
     stages = scope.get("stages", [])
     if not stages:
@@ -84,12 +106,19 @@ def _print_scope(scope: dict, assignments: dict, depth: int, p) -> int:
     p(f"{indent}[{scope_name}]")
     total = 0
     for stage in stages:
-        total += _print_stage(stage, assignments, depth + 1, p)
-    p(f"{indent}  → scope total: {total:,} cycles")
+        total += _print_stage(stage, assignments, depth + 1, p, cost_parser, unit)
+    p(f"{indent}  → scope total: {total:,} {unit}")
     return total
 
 
-def _print_stage(stage: dict, assignments: dict, depth: int, p) -> int:
+def _print_stage(
+    stage: dict,
+    assignments: dict,
+    depth: int,
+    p,
+    cost_parser: CostParser,
+    unit: str,
+) -> int:
     """Print one stage; return its evaluated cost."""
     indent = "  " * depth
     stage_id = stage.get("stage_id", "?")
@@ -99,9 +128,9 @@ def _print_stage(stage: dict, assignments: dict, depth: int, p) -> int:
         trip = parse_expr(flb["trip_count"]).eval(assignments)
         block_sym = flb.get("block_sym") or "loop"
         p(f"{indent}Stage {stage_id} [for_loop_block block_sym={block_sym!r} trip={trip}]")
-        inner = _print_block(flb, assignments, depth + 1, p)
+        inner = _print_block(flb, assignments, depth + 1, p, cost_parser, unit)
         cost = inner * trip
-        p(f"{indent}  → {inner:,} × {trip} = {cost:,} cycles")
+        p(f"{indent}  → {inner:,} × {trip} = {cost:,} {unit}")
         return cost
 
     if "Parallel" in stage:
@@ -110,13 +139,13 @@ def _print_stage(stage: dict, assignments: dict, depth: int, p) -> int:
         branch_costs = []
         for i, item in enumerate(parallel):
             scenarios = item["Sequential"]["scenarios"]
-            si, cost = _eval_scenario(scenarios, assignments)
+            si, cost = _eval_scenario(scenarios, assignments, cost_parser)
             label = f"Parallel[{i}] scenario[{si}]" if si is not None else f"Parallel[{i}] (no match)"
-            p(f"{indent}  {label:<30s}  {cost if cost is not None else '?':>10} cycles")
+            p(f"{indent}  {label:<30s}  {cost if cost is not None else '?':>10} {unit}")
             branch_costs.append(cost or 0)
         stage_cost = max(branch_costs)
         if len(branch_costs) > 1:
-            p(f"{indent}  → stage max: {stage_cost:,} cycles")
+            p(f"{indent}  → stage max: {stage_cost:,} {unit}")
         return stage_cost
 
     return 0

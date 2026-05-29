@@ -22,7 +22,7 @@ from __future__ import annotations
 
 from ..ast import Expr, Const, Sym, Add, Mul, Div, Max, IfElse, Switch, Eq, Top, parse_expr, parse_constraint
 
-TIME_COST_SCALE = 4
+TIME_COST_SCALE = 64
 
 _INF_CYCLES = 2**31
 _SCALED_INF = Const((_INF_CYCLES + TIME_COST_SCALE - 1) // TIME_COST_SCALE)
