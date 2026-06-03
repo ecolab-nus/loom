@@ -13,7 +13,9 @@ The ETG uses a nested for_loop_block tree structure:
 Cost model:
     t_body(block) = t_compute + t_store
     t_self(block) = IF(is_double_buffer==1, MAX(t_load, t_body), t_load + t_body)
-    stage cost when the stage is a for_loop_block = t_self(block) * trip_count
+    stage cost when the stage is a for_loop_block:
+        t_self(block) * trip_count
+        + is_double_buffer * t_load  # DB boundary compensation
     stages within one scope are sequential → summed
     siblings within one Parallel node execute concurrently → MAX'd
 """
@@ -61,16 +63,23 @@ def _scope_time_ast(scope: dict, has_db: bool, scale_time_costs: bool) -> Expr:
     stages = scope.get("stages", [])
     if not stages:
         return Const(0)
-    return Add([_stage_time_ast(s, has_db, scale_time_costs) for s in stages])
+    stage_times = [_stage_time_ast(s, has_db, scale_time_costs) for s in stages]
+    return stage_times[0] if len(stage_times) == 1 else Add(stage_times)
 
 
 def _stage_time_ast(stage: dict, has_db: bool, scale_time_costs: bool) -> Expr:
     """Cost contribution of one stage entry."""
     if "for_loop_block" in stage:
-        flb        = stage["for_loop_block"]
-        inner_cost = _block_time_ast(flb, has_db, scale_time_costs)
-        trip       = parse_expr(flb["trip_count"])
-        return Mul(trip, inner_cost)
+        flb = stage["for_loop_block"]
+        t_load = _scope_time_ast(flb["load_scope"], has_db, scale_time_costs)
+        t_comp = _scope_time_ast(flb["compute_scope"], has_db, scale_time_costs)
+        t_store = _scope_time_ast(flb["store_scope"], has_db, scale_time_costs)
+        t_body = Add([t_comp, t_store])
+        trip = parse_expr(flb["trip_count"])
+        base = Mul(trip, _combine_double_buffer(t_load, t_body, has_db))
+        if has_db:
+            return Add([base, Mul(Sym("is_double_buffer"), t_load)])
+        return base
 
     if "Parallel" in stage:
         par_times = [
@@ -84,8 +93,8 @@ def _stage_time_ast(stage: dict, has_db: bool, scale_time_costs: bool) -> Expr:
 
 def _combine_double_buffer(t_load: Expr, t_body: Expr, has_db: bool) -> Expr:
     t_sum = Add([t_load, t_body])
-    t_max = Max([t_load, t_body])
     if has_db:
+        t_max = Max([t_load, t_body])
         return IfElse(Eq(Sym("is_double_buffer"), Const(1)), t_max, t_sum)
     return t_sum
 
