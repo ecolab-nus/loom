@@ -86,6 +86,105 @@ def _parse_solver_time_cost(time_cost: object):
     return Div(parse_expr(time_cost), Const(TIME_COST_SCALE))
 
 
+def prepare_manual_block_sizes(
+    variants: list[dict],
+    assigned_block_size: dict[str, Any],
+) -> dict[str, dict[str, Any]]:
+    """Expand and validate manually assigned block sizes by variant name."""
+    if not assigned_block_size:
+        raise ValueError("assigned_block_size must be a non-empty object")
+
+    if "ALL" in assigned_block_size and len(assigned_block_size) > 1:
+        raise ValueError("assigned_block_size cannot mix 'ALL' with candidate names")
+
+    for key, assignment in assigned_block_size.items():
+        if not isinstance(assignment, dict):
+            raise ValueError(f"assigned_block_size['{key}'] must be an object")
+
+    variant_names = [get_variant_name(variant, i) for i, variant in enumerate(variants)]
+    if "ALL" in assigned_block_size:
+        assignment = dict(assigned_block_size["ALL"])
+        return {name: dict(assignment) for name in variant_names}
+
+    unknown = sorted(set(assigned_block_size) - set(variant_names))
+    if unknown:
+        available = ", ".join(variant_names[:5])
+        suffix = "..." if len(variant_names) > 5 else ""
+        raise ValueError(
+            "Unknown assigned_block_size candidate(s): "
+            f"{', '.join(unknown)}. Available candidates include: {available}{suffix}"
+        )
+
+    return {name: dict(assignment) for name, assignment in assigned_block_size.items()}
+
+
+def write_manual_breakdown_log(
+    variants: list[dict],
+    assigned_block_size: dict[str, Any],
+    output_path: Path | str,
+) -> dict[str, dict[str, Any]]:
+    """Write reporter breakdowns for manual assignments without running the solver."""
+    block_sizes = prepare_manual_block_sizes(variants, assigned_block_size)
+    total = len(variants)
+
+    with open(output_path, "w", encoding="utf-8") as log:
+        for index, variant in enumerate(variants):
+            vname = get_variant_name(variant, index)
+            assignment = block_sizes.get(vname)
+            if assignment is None:
+                continue
+
+            completed = _complete_manual_assignment(variant, assignment, vname)
+            min_val = compute_total_time_ast(variant).eval(completed)
+            print_breakdown(
+                variant,
+                completed,
+                min_val,
+                index,
+                total,
+                file=log,
+                cost_parser=_parse_solver_time_cost,
+                unit="solver units",
+            )
+            print("-" * 72, file=log)
+
+    return block_sizes
+
+
+def _complete_manual_assignment(
+    variant: dict,
+    assignment: dict[str, Any],
+    variant_name: str,
+) -> dict[str, int]:
+    metadata = variant.get("constraint_scope", {}).get("metadata", {})
+    required_symbols = set(metadata.get("symbols", {}))
+    boolean_symbols = set(metadata.get("booleans", []))
+    completed: dict[str, int] = {}
+
+    for sym, value in assignment.items():
+        if not isinstance(value, int):
+            raise ValueError(
+                f"assigned_block_size['{variant_name}']['{sym}'] must be an integer"
+            )
+        completed[sym] = int(value)
+
+    missing = sorted(required_symbols - set(completed))
+    if missing:
+        raise ValueError(
+            f"assigned_block_size['{variant_name}'] missing required symbol(s): "
+            f"{', '.join(missing)}"
+        )
+
+    for sym in sorted(boolean_symbols):
+        completed.setdefault(sym, 1)
+        if completed[sym] not in (0, 1):
+            raise ValueError(
+                f"assigned_block_size['{variant_name}']['{sym}'] must be 0 or 1"
+            )
+
+    return completed
+
+
 def _write_detailed_log(
     results: list[dict], output_path: Path | str, total: int, debug: bool = False,
 ) -> None:

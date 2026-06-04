@@ -59,9 +59,10 @@ Config file notes
       }
     }
 
-When ``assigned_block_size`` is a non-empty JSON object, Loom skips ETG
-generation/resolution and solver stages, then uses these values directly
-for materialization.
+When ``assigned_block_size`` is a non-empty JSON object, Loom skips the
+solver and uses these values directly for materialization. In debug mode,
+ETG generation/resolution still runs so Loom can write manual latency
+breakdowns to ``constraints/solver.log``.
 """
 from __future__ import annotations
 

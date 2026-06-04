@@ -17,8 +17,9 @@ Pipeline stages
   3. CP-SAT solver      – CPMpy/OR-Tools block-size optimizer (optional)
   4. Materialization    – C++ passes via pybind11 (loom_pipeline)
 
-When ``assigned_block_size`` is provided (non-empty), ETG generation is
-skipped in Step 1 and Steps 2/3 are bypassed entirely.
+When ``assigned_block_size`` is provided (non-empty), solving is bypassed.
+ETG generation/resolution is still run in debug mode so manual latency
+breakdowns can be written to ``solver.log``.
 
 Output layout under <output_path>
 ----------------------------------
@@ -256,8 +257,8 @@ def run_pipeline(
         instead of the built-in defaults.  Steps 2 and 3 still run in all cases.
     assigned_block_size:
         Optional explicit block-size assignments to use directly for
-        materialization. When provided as a non-empty dict, Step 1 runs with
-        ``skip_etg=True`` and Steps 2/3 are skipped.
+        materialization. When provided as a non-empty dict, Step 3 is skipped.
+        Step 2 also runs in debug mode to support manual latency reporting.
     topk:
         Optional positive integer limiting materialization to the top K
         candidates by optimal time.
@@ -272,26 +273,54 @@ def run_pipeline(
     mlir_text = run_step_0_frontend(generate_mlir_fn, ir_dir, debug)
 
     has_assigned_block_size = bool(assigned_block_size)
+    needs_manual_etg = (
+        has_assigned_block_size
+        and (debug or "ALL" in assigned_block_size)
+    )
 
     # Step 1: Exploration
     explored_mlir, etg_json_text = run_step_1_exploration(
         mlir_text, str(hw_spec), ir_dir, constraints_dir, debug,
-        skip_etg=has_assigned_block_size,
+        skip_etg=has_assigned_block_size and not needs_manual_etg,
     )
     del mlir_text
 
     if has_assigned_block_size:
-        logging.info("")
-        logging.info("=" * 72)
-        logging.info("STEP 2: ETG RESOLUTION (MLAR evaluator)")
-        logging.info("=" * 72)
-        logging.info("Skipped due to assigned_block_size override.")
+        if needs_manual_etg:
+            resolved_variants = run_step_2_etg_resolution(
+                etg_json_text, njobs, constraints_dir
+            )
+            from loom.solver import (  # noqa: PLC0415
+                prepare_manual_block_sizes,
+                write_manual_breakdown_log,
+            )
+
+            if debug:
+                solver_log = constraints_dir / "solver.log"
+                block_size = write_manual_breakdown_log(
+                    resolved_variants,
+                    assigned_block_size,
+                    solver_log,
+                )
+                logging.info(f"Manual latency breakdown written to: {solver_log}")
+            else:
+                block_size = prepare_manual_block_sizes(
+                    resolved_variants,
+                    assigned_block_size,
+                )
+        else:
+            logging.info("")
+            logging.info("=" * 72)
+            logging.info("STEP 2: ETG RESOLUTION (MLAR evaluator)")
+            logging.info("=" * 72)
+            logging.info("Skipped due to assigned_block_size override.")
+            block_size = assigned_block_size
+
         logging.info("")
         logging.info("=" * 72)
         logging.info("STEP 3: SOLVER (CPMpy/CP-SAT)")
         logging.info("=" * 72)
         logging.info("Skipped due to assigned_block_size override.")
-        block_size = assigned_block_size
     else:
         # Step 2: ETG resolution
         run_step_2_etg_resolution(etg_json_text, njobs, constraints_dir)
