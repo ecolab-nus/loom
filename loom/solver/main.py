@@ -47,7 +47,10 @@ def solve_variant(
     # Add constraints and solve
     ctx.add_hard_constraints(hard_constraints_ast)
     ctx.add_hard_constraints(memory_constraints_ast, label_prefix="memory_l1")
-    ctx.add_trip_count_constraints(_collect_trip_counts(variant["kernel_block"]))
+    iter_exprs, iter_labels = _collect_iter_num_constraints(
+        variant["constraint_scope"]["metadata"]["iter_num"]
+    )
+    ctx.add_trip_count_constraints(iter_exprs, labels=iter_labels)
     status, scaled_min_val, assignments = ctx.find_optimum(t_total_ast)
     min_val = scaled_min_val
 
@@ -67,17 +70,16 @@ def solve_variant(
     }
 
 
-def _collect_trip_counts(block: dict) -> list[dict]:
-    """Collect trip_count expressions from every for_loop_block in DFS order."""
-    trip_counts = []
-    for scope_name in ("load_scope", "compute_scope", "store_scope"):
-        for stage in block.get(scope_name, {}).get("stages", []):
-            if "for_loop_block" not in stage:
-                continue
-            loop_block = stage["for_loop_block"]
-            trip_counts.append(loop_block["trip_count"])
-            trip_counts.extend(_collect_trip_counts(loop_block))
-    return trip_counts
+def _collect_iter_num_constraints(iter_num: dict) -> tuple[list[dict], list[str]]:
+    """Collect solver feasibility expressions from constraint metadata."""
+    exprs = [iter_num["seq_iter"]]
+    labels = ["iter_num.seq_iter"]
+
+    for i, temp_iter in enumerate(iter_num.get("temp_iter", [])):
+        exprs.append(temp_iter)
+        labels.append(f"iter_num.temp_iter[{i}]")
+
+    return exprs, labels
 
 
 def _parse_solver_time_cost(time_cost: object):

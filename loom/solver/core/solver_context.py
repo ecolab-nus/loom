@@ -84,7 +84,11 @@ class SolverContext:
         denoms.reverse()
         return current, denoms
 
-    def add_trip_count_constraints(self, trip_count_exprs: list[dict]) -> None:
+    def add_trip_count_constraints(
+        self,
+        trip_count_exprs: list[dict],
+        labels: list[str] | None = None,
+    ) -> None:
         """Add no-oversize constraints for each loop trip-count expression.
 
         Flattens nested Div chains before resolving:
@@ -95,11 +99,15 @@ class SolverContext:
         """
         resolver = ExprResolver(self.symbol_map)
 
+        if labels is not None and len(labels) != len(trip_count_exprs):
+            raise ValueError("trip-count constraint labels must match expressions")
+
         for i, raw in enumerate(trip_count_exprs):
+            label = labels[i] if labels is not None else f"trip_count[{i}]"
             node = parse_expr(raw)
             if not isinstance(node, Div):
                 raise ValueError(
-                    f"Expected top-level Div node in trip_count[{i}], "
+                    f"Expected top-level Div node in {label}, "
                     f"got {type(node).__name__}: {node}"
                 )
 
@@ -117,7 +125,7 @@ class SolverContext:
 
             no_oversize_c = denom_cp <= num_cp
             self.model += no_oversize_c
-            self._tracked_constraints.append((f"trip_count[{i}]", no_oversize_c))
+            self._tracked_constraints.append((label, no_oversize_c))
 
     def find_optimum(
         self,
