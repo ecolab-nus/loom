@@ -59,6 +59,16 @@ Config file notes
       }
     }
 
+    # Or materialize multiple block-size combos for the same variant:
+    {
+      "assigned_block_size": {
+        "variant_name": [
+          {"tile_m": 512, "tile_n": 512, "tile_k": 64},
+          {"tile_m": 256, "tile_n": 256, "tile_k": 128}
+        ]
+      }
+    }
+
 When ``assigned_block_size`` is a non-empty JSON object, Loom skips the
 solver and uses these values directly for materialization. In debug mode,
 ETG generation/resolution still runs so Loom can write manual latency

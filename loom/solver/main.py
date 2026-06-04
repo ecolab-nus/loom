@@ -89,7 +89,7 @@ def _parse_solver_time_cost(time_cost: object):
 def prepare_manual_block_sizes(
     variants: list[dict],
     assigned_block_size: dict[str, Any],
-) -> dict[str, dict[str, Any]]:
+) -> dict[str, Any]:
     """Expand and validate manually assigned block sizes by variant name."""
     if not assigned_block_size:
         raise ValueError("assigned_block_size must be a non-empty object")
@@ -97,14 +97,15 @@ def prepare_manual_block_sizes(
     if "ALL" in assigned_block_size and len(assigned_block_size) > 1:
         raise ValueError("assigned_block_size cannot mix 'ALL' with candidate names")
 
-    for key, assignment in assigned_block_size.items():
-        if not isinstance(assignment, dict):
-            raise ValueError(f"assigned_block_size['{key}'] must be an object")
+    normalized = {
+        key: _normalize_manual_assignment_value(key, assignment)
+        for key, assignment in assigned_block_size.items()
+    }
 
     variant_names = [get_variant_name(variant, i) for i, variant in enumerate(variants)]
     if "ALL" in assigned_block_size:
-        assignment = dict(assigned_block_size["ALL"])
-        return {name: dict(assignment) for name in variant_names}
+        assignment = normalized["ALL"]
+        return {name: _copy_manual_assignment_value(assignment) for name in variant_names}
 
     unknown = sorted(set(assigned_block_size) - set(variant_names))
     if unknown:
@@ -115,14 +116,17 @@ def prepare_manual_block_sizes(
             f"{', '.join(unknown)}. Available candidates include: {available}{suffix}"
         )
 
-    return {name: dict(assignment) for name, assignment in assigned_block_size.items()}
+    return {
+        name: _copy_manual_assignment_value(assignment)
+        for name, assignment in normalized.items()
+    }
 
 
 def write_manual_breakdown_log(
     variants: list[dict],
     assigned_block_size: dict[str, Any],
     output_path: Path | str,
-) -> dict[str, dict[str, Any]]:
+) -> dict[str, Any]:
     """Write reporter breakdowns for manual assignments without running the solver."""
     block_sizes = prepare_manual_block_sizes(variants, assigned_block_size)
     total = len(variants)
@@ -134,21 +138,57 @@ def write_manual_breakdown_log(
             if assignment is None:
                 continue
 
-            completed = _complete_manual_assignment(variant, assignment, vname)
-            min_val = compute_total_time_ast(variant).eval(completed)
-            print_breakdown(
-                variant,
-                completed,
-                min_val,
-                index,
-                total,
-                file=log,
-                cost_parser=_parse_solver_time_cost,
-                unit="solver units",
-            )
-            print("-" * 72, file=log)
+            for combo in _iter_manual_assignment_combos(assignment):
+                completed = _complete_manual_assignment(variant, combo, vname)
+                min_val = compute_total_time_ast(variant).eval(completed)
+                print_breakdown(
+                    variant,
+                    completed,
+                    min_val,
+                    index,
+                    total,
+                    file=log,
+                    cost_parser=_parse_solver_time_cost,
+                    unit="solver units",
+                )
+                print("-" * 72, file=log)
 
     return block_sizes
+
+
+def _normalize_manual_assignment_value(key: str, assignment: Any) -> Any:
+    if assignment is None:
+        return None
+    if isinstance(assignment, dict):
+        return dict(assignment)
+    if isinstance(assignment, list):
+        if not assignment:
+            raise ValueError(f"assigned_block_size['{key}'] must not be an empty list")
+        normalized = []
+        for i, combo in enumerate(assignment):
+            if not isinstance(combo, dict):
+                raise ValueError(
+                    f"assigned_block_size['{key}'][{i}] must be an object"
+                )
+            normalized.append(dict(combo))
+        return normalized
+    raise ValueError(
+        f"assigned_block_size['{key}'] must be an object, list of objects, or null"
+    )
+
+
+def _copy_manual_assignment_value(assignment: Any) -> Any:
+    if assignment is None:
+        return None
+    if isinstance(assignment, list):
+        return [dict(combo) for combo in assignment]
+    return dict(assignment)
+
+
+def _iter_manual_assignment_combos(assignment: Any) -> list[dict[str, Any]]:
+    if isinstance(assignment, list):
+        return assignment
+    return [assignment]
 
 
 def _complete_manual_assignment(
