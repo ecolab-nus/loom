@@ -39,13 +39,14 @@ CLI produced (inherited from LoomKernel)
 ::
 
     # Recommended: load paths from a config file
-    python kernels/matmul.py --config kernels/config.json [--njobs N] [--debug]
+    python kernels/matmul.py --config kernels/config.json [--njobs N] [--debug] \
+        [--topk-candidates K] [--topk-block-size K]
 
     # Or pass paths directly on the command line
     python kernels/matmul.py \
         --output-path  DIR \
         --hw-spec      PATH \
-        [--njobs N] [--debug]
+        [--njobs N] [--debug] [--topk-candidates K] [--topk-block-size K]
 
 Config file notes
 -----------------
@@ -198,11 +199,19 @@ class LoomKernel:
             help="Enable detailed analysis and write intermediate IRs/logs.",
         )
         parser.add_argument(
-            "--topk",
+            "--topk-candidates",
+            dest="topk_candidates",
             type=_positive_int,
             default=None,
             metavar="K",
             help="Keep only the top K candidates by optimal time in the final output.",
+        )
+        parser.add_argument(
+            "--topk-block-size",
+            type=_positive_odd_int,
+            default=1,
+            metavar="K",
+            help="Materialize K local block-size samples per symbol around each selected candidate.",
         )
         return parser
 
@@ -275,12 +284,20 @@ class LoomKernel:
             debug=args.debug,
             symbol_domains=symbol_domains,
             assigned_block_size=assigned_block_size if has_assigned_block_size else None,
-            topk=args.topk,
+            topk_candidates=args.topk_candidates,
+            topk_block_size=args.topk_block_size,
         )
 
 
 def _positive_int(value: str) -> int:
     parsed = int(value)
     if parsed <= 0:
-        raise argparse.ArgumentTypeError("--topk must be a positive integer")
+        raise argparse.ArgumentTypeError("value must be a positive integer")
+    return parsed
+
+
+def _positive_odd_int(value: str) -> int:
+    parsed = _positive_int(value)
+    if parsed % 2 == 0:
+        raise argparse.ArgumentTypeError("value must be an odd integer")
     return parsed

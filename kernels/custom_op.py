@@ -2,7 +2,7 @@
 
 Standalone CLI script. Run from the repo root:
 
-    python kernels/custom_op.py --config kernels/config_files/ --njobs 16 --debug
+    python kernels/custom_op.py --config kernels/config_files/ --njobs 16 --debug --topk-candidates 1 --topk-block-size 3
 
 This script inherits the full Loom CLI and pipeline from LoomKernel.
 To write your own kernel, copy this file, replace the kernel body

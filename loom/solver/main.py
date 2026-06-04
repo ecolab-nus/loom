@@ -2,6 +2,7 @@
 
 import argparse
 import sys
+from itertools import product
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from pathlib import Path
 from typing import Any, Optional
@@ -225,6 +226,61 @@ def _complete_manual_assignment(
     return completed
 
 
+def sample_block_size_neighbors(
+    assignment: dict[str, int],
+    metadata_symbols: dict[str, Any],
+    topk_block_size: int = 1,
+) -> list[dict[str, int]]:
+    """Return the solved assignment plus local 32-step block-size neighbors."""
+    if topk_block_size <= 0:
+        raise ValueError("topk_block_size must be a positive integer")
+
+    if topk_block_size == 1:
+        return [dict(assignment)]
+
+    radius = topk_block_size // 2
+    sample_symbols = [
+        sym for sym in sorted(metadata_symbols)
+        if sym in assignment and not sym.startswith("__")
+    ]
+    fixed = {
+        sym: value for sym, value in assignment.items()
+        if sym not in sample_symbols
+    }
+
+    symbol_options: list[tuple[str, list[int]]] = []
+    for sym in sample_symbols:
+        base = assignment[sym]
+        options = [base]
+        for step in range(1, radius + 1):
+            for candidate in (base - 32 * step, base + 32 * step):
+                if candidate > 0 and candidate % 32 == 0 and candidate not in options:
+                    options.append(candidate)
+        symbol_options.append((sym, options))
+
+    if not symbol_options:
+        return [dict(assignment)]
+
+    combos: list[dict[str, int]] = []
+    seen: set[tuple[tuple[str, int], ...]] = set()
+
+    def add_combo(values: dict[str, int]) -> None:
+        key = tuple(sorted(values.items()))
+        if key not in seen:
+            seen.add(key)
+            combos.append(values)
+
+    add_combo(dict(assignment))
+    names = [sym for sym, _ in symbol_options]
+    options_product = product(*(options for _, options in symbol_options))
+    for values in options_product:
+        combo = dict(fixed)
+        combo.update(zip(names, values))
+        add_combo(combo)
+
+    return combos
+
+
 def _write_detailed_log(
     results: list[dict], output_path: Path | str, total: int, debug: bool = False,
 ) -> None:
@@ -254,11 +310,17 @@ def run(
     njobs: int = 1,
     output_path: Path | str | None = None,
     symbol_domains: dict[str, list[int]] | None = None,
-    topk: int | None = None,
+    topk_candidates: int | None = None,
+    topk_block_size: int = 1,
     debug: bool = False,
+    topk: int | None = None,
 ) -> dict[str, dict[str, int] | None]:
-    if topk is not None and topk <= 0:
-        raise ValueError("topk must be a positive integer")
+    if topk is not None:
+        topk_candidates = topk
+    if topk_candidates is not None and topk_candidates <= 0:
+        raise ValueError("topk_candidates must be a positive integer")
+    if topk_block_size <= 0:
+        raise ValueError("topk_block_size must be a positive integer")
 
     variants = load_variants(input_path)
     total = len(variants)
@@ -296,14 +358,14 @@ def run(
     feasible = [r for r in results if r["status"] == "OPTIMAL"]
     best = min(feasible, key=lambda r: r["scaled_min_val"]) if feasible else None
 
-    topk_filter = _select_topk(feasible, topk)
+    topk_filter = _select_topk(feasible, topk_candidates)
     omitted_by_topk = topk_filter["omitted"]
     tied_omitted_by_topk = topk_filter["tied_omitted"]
     tied_omitted_indices = {r["index"] for r in tied_omitted_by_topk}
     if tied_omitted_by_topk:
         print("\nTOPK TIE OMITTED")
         print(
-            f"  topk={topk}, cutoff T={topk_filter['cutoff_min_val']:,} solver units, "
+            f"  topk_candidates={topk_candidates}, cutoff T={topk_filter['cutoff_min_val']:,} solver units, "
             f"kept={topk_filter['kept_count']}, omitted_tied={len(tied_omitted_by_topk)}"
         )
         for r in sorted(tied_omitted_by_topk, key=lambda item: item["index"]):
@@ -312,7 +374,7 @@ def run(
 
     block_sizes = {
         get_variant_name(r["variant"], r["index"]): (
-            dict(r["assignments"])
+            _materialization_assignments(r, topk_block_size)
             if r["status"] == "OPTIMAL" and r["index"] not in omitted_by_topk
             else None
         )
@@ -331,7 +393,7 @@ def run(
                 if r["index"] in tied_omitted_indices:
                     omit_lines.append(f"  [{idx:3d}/{total}] {vname}  OMITTED: tied at topk cutoff (T={r['min_val']:,} solver units)")
                 else:
-                    omit_lines.append(f"  [{idx:3d}/{total}] {vname}  OMITTED: outside topk={topk} (T={r['min_val']:,} solver units)")
+                    omit_lines.append(f"  [{idx:3d}/{total}] {vname}  OMITTED: outside topk={topk_candidates} (T={r['min_val']:,} solver units)")
         if omit_lines:
             print("\nOMIT SUMMARY:")
             for line in omit_lines:
@@ -352,6 +414,20 @@ def run(
             unit="solver units",
         )
     return block_sizes
+
+
+def _materialization_assignments(r: dict, topk_block_size: int) -> Any:
+    assignments = dict(r["assignments"])
+    if topk_block_size == 1:
+        return assignments
+
+    metadata_symbols = (
+        r["variant"]
+        .get("constraint_scope", {})
+        .get("metadata", {})
+        .get("symbols", {})
+    )
+    return sample_block_size_neighbors(assignments, metadata_symbols, topk_block_size)
 
 
 def _select_topk(feasible: list[dict], topk: int | None) -> dict[str, Any]:

@@ -159,11 +159,14 @@ def run_step_3_solve(
     debug: bool,
     constraints_dir: Path,
     symbol_domains: dict[str, list[int]] | None = None,
-    topk: int | None = None,
+    topk_candidates: int | None = None,
+    topk_block_size: int = 1,
 ) -> dict[str, Any]:
     """Step 3: CPMpy/CP-SAT solver (finds optimal block sizes)."""
-    if topk is not None and topk <= 0:
-        raise ValueError("topk must be a positive integer")
+    if topk_candidates is not None and topk_candidates <= 0:
+        raise ValueError("topk_candidates must be a positive integer")
+    if topk_block_size <= 0:
+        raise ValueError("topk_block_size must be a positive integer")
 
     logging.info("")
     logging.info("=" * 72)
@@ -181,7 +184,8 @@ def run_step_3_solve(
             njobs=njobs,
             output_path=solver_log,
             symbol_domains=symbol_domains,
-            topk=topk,
+            topk_candidates=topk_candidates,
+            topk_block_size=topk_block_size,
             debug=debug,
         )
 
@@ -233,7 +237,8 @@ def run_pipeline(
     debug: bool = False,
     symbol_domains: dict[str, list[int]] | None = None,
     assigned_block_size: dict[str, Any] | None = None,
-    topk: int | None = None,
+    topk_candidates: int | None = None,
+    topk_block_size: int = 1,
 ) -> None:
     """Run the full Loom compilation pipeline.
 
@@ -259,9 +264,12 @@ def run_pipeline(
         Optional explicit block-size assignments to use directly for
         materialization. When provided as a non-empty dict, Step 3 is skipped.
         Step 2 also runs in debug mode to support manual latency reporting.
-    topk:
+    topk_candidates:
         Optional positive integer limiting materialization to the top K
         candidates by optimal time.
+    topk_block_size:
+        Optional positive odd integer controlling 32-step neighbor sampling
+        around each solver-selected block-size assignment.
     """
     output_path = Path(output_path)
     ir_dir = output_path / "IRs"
@@ -330,7 +338,8 @@ def run_pipeline(
         block_size = run_step_3_solve(
             resolved_etg_path, njobs, debug, constraints_dir,
             symbol_domains=symbol_domains,
-            topk=topk,
+            topk_candidates=topk_candidates,
+            topk_block_size=topk_block_size,
         )
 
     del etg_json_text

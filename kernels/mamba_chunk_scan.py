@@ -5,7 +5,9 @@ Standalone CLI script. Run from the repo root:
     python kernels/mamba_chunk_scan_wh/L4096_N128_H128_G8_D128_C512.py \
         --config kernels/config_files/mamba_chunk_scan_wh/L4096_N128_H128_G8_D128_C512.json \
         --njobs 1 \
-        --debug
+        --debug \
+        --topk-candidates 1 \
+        --topk-block-size 3
 
 This script inherits the full Loom CLI and pipeline from LoomKernel.
 To write your own kernel, copy this file, replace the kernel body
