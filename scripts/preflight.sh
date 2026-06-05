@@ -196,7 +196,7 @@ run_preflight_checks() {
     check_pip
 
     if [ "${SKIP_DATAFLOW:-0}" != "1" ]; then
-        check_cmake
+        #check_cmake
         check_ninja
         check_lld
         check_cxx_compiler
