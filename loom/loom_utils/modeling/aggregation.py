@@ -23,7 +23,7 @@ Cost model:
 from __future__ import annotations
 
 from ..ast import (
-    Expr, Const, Sym, CommonExpr, Add, Mul, Div, Max, IfElse, Switch, Eq, Top,
+    Expr, Const, Sym, CommonExpr, Add, Mul, Div, Max, Min, IfElse, Switch, Eq, Top,
     parse_expr, parse_constraint,
 )
 
@@ -121,7 +121,7 @@ def _stage_time_ast(
         trip = parse_expr(flb["trip_count"])
         base = Mul(trip, _combine_double_buffer(t_load, t_body, has_db))
         if has_db:
-            return Add([base, Mul(Sym("is_double_buffer"), t_load)])
+            return Add([base, Mul(Sym("is_double_buffer"), Min([t_load, t_body]))])
         return base
 
     if "Parallel" in stage:

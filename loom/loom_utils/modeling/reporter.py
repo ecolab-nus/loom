@@ -165,12 +165,13 @@ def _print_stage(
         timing = _print_block_timing(flb, assignments, depth + 1, p, cost_parser, unit)
         inner = timing.total
         base_cost = inner * trip
-        db_overhead = timing.load if assignments.get("is_double_buffer", 0) else 0
-        cost = base_cost + db_overhead
-        if db_overhead:
+        db_tail = min(timing.load, timing.body) if assignments.get("is_double_buffer", 0) else 0
+        cost = base_cost + db_tail
+        if db_tail:
             p(
                 f"{indent}  → {inner:,} × {trip} + "
-                f"db_overhead(load={timing.load:,}) = {cost:,} {unit}"
+                f"db_tail(min(load={timing.load:,}, body={timing.body:,})="
+                f"{db_tail:,}) = {cost:,} {unit}"
             )
         else:
             p(f"{indent}  → {inner:,} × {trip} = {cost:,} {unit}")
