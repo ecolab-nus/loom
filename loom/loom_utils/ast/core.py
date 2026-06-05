@@ -55,6 +55,20 @@ class Sym(Expr):
 
 
 @dataclass
+class CommonExpr(Expr):
+    """A named expression that solver backends may materialize once and reuse."""
+
+    name: str
+    expr: Expr
+
+    def eval(self, env: dict[str, int]) -> int:
+        return self.expr.eval(env)
+
+    def __str__(self) -> str:
+        return f"{self.name}:=({self.expr})"
+
+
+@dataclass
 class UnaryOp(Expr):
     op: str
     operand: Expr

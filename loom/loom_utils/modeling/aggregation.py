@@ -22,7 +22,10 @@ Cost model:
 
 from __future__ import annotations
 
-from ..ast import Expr, Const, Sym, Add, Mul, Div, Max, IfElse, Switch, Eq, Top, parse_expr, parse_constraint
+from ..ast import (
+    Expr, Const, Sym, CommonExpr, Add, Mul, Div, Max, IfElse, Switch, Eq, Top,
+    parse_expr, parse_constraint,
+)
 
 TIME_COST_SCALE = 64
 
@@ -30,7 +33,25 @@ _INF_CYCLES = 2**31
 _SCALED_INF = Const((_INF_CYCLES + TIME_COST_SCALE - 1) // TIME_COST_SCALE)
 
 
-def compute_total_time_ast(variant: dict, *, scale_time_costs: bool = True) -> Expr:
+class _CommonExprBuilder:
+    def __init__(self) -> None:
+        self._counter = 0
+
+    def wrap(self, prefix: str, expr: Expr) -> Expr:
+        if isinstance(expr, (Const, Sym, CommonExpr)):
+            return expr
+
+        name = f"{prefix}_{self._counter}"
+        self._counter += 1
+        return CommonExpr(name, expr)
+
+
+def compute_total_time_ast(
+    variant: dict,
+    *,
+    scale_time_costs: bool = True,
+    use_common_expr: bool = False,
+) -> Expr:
     """Build the Pure Python AST for the total pipeline execution time.
 
     Reads variant["kernel_block"] and recurses through the for_loop_block tree.
@@ -42,39 +63,61 @@ def compute_total_time_ast(variant: dict, *, scale_time_costs: bool = True) -> E
     symbols_meta  = meta.get("symbols", {})
     has_db = ("is_double_buffer" in booleans_meta) or ("is_double_buffer" in symbols_meta)
 
-    return _block_time_ast(variant["kernel_block"], has_db, scale_time_costs)
+    common = _CommonExprBuilder() if use_common_expr else None
+    return _block_time_ast(variant["kernel_block"], has_db, scale_time_costs, common)
 
 
-def _block_time_ast(block: dict, has_db: bool, scale_time_costs: bool) -> Expr:
+def _block_time_ast(
+    block: dict,
+    has_db: bool,
+    scale_time_costs: bool,
+    common: _CommonExprBuilder | None,
+) -> Expr:
     """Cost of one block (kernel_block or for_loop_block), excluding its own trip_count.
 
     The caller is responsible for multiplying by trip_count when this block is
     consumed as a stage of a parent scope.
     """
-    t_load = _scope_time_ast(block["load_scope"], has_db, scale_time_costs)
-    t_comp = _scope_time_ast(block["compute_scope"], has_db, scale_time_costs)
-    t_store = _scope_time_ast(block["store_scope"], has_db, scale_time_costs)
+    t_load = _scope_time_ast(block["load_scope"], has_db, scale_time_costs, common)
+    t_comp = _scope_time_ast(block["compute_scope"], has_db, scale_time_costs, common)
+    t_store = _scope_time_ast(block["store_scope"], has_db, scale_time_costs, common)
     t_body = Add([t_comp, t_store])
+    if has_db and common is not None:
+        t_load = common.wrap("block_load", t_load)
+        t_body = common.wrap("block_body", t_body)
     return _combine_double_buffer(t_load, t_body, has_db)
 
 
-def _scope_time_ast(scope: dict, has_db: bool, scale_time_costs: bool) -> Expr:
+def _scope_time_ast(
+    scope: dict,
+    has_db: bool,
+    scale_time_costs: bool,
+    common: _CommonExprBuilder | None,
+) -> Expr:
     """Sum of stage times within one scope. Returns Const(0) for an empty scope."""
     stages = scope.get("stages", [])
     if not stages:
         return Const(0)
-    stage_times = [_stage_time_ast(s, has_db, scale_time_costs) for s in stages]
+    stage_times = [_stage_time_ast(s, has_db, scale_time_costs, common) for s in stages]
     return stage_times[0] if len(stage_times) == 1 else Add(stage_times)
 
 
-def _stage_time_ast(stage: dict, has_db: bool, scale_time_costs: bool) -> Expr:
+def _stage_time_ast(
+    stage: dict,
+    has_db: bool,
+    scale_time_costs: bool,
+    common: _CommonExprBuilder | None,
+) -> Expr:
     """Cost contribution of one stage entry."""
     if "for_loop_block" in stage:
         flb = stage["for_loop_block"]
-        t_load = _scope_time_ast(flb["load_scope"], has_db, scale_time_costs)
-        t_comp = _scope_time_ast(flb["compute_scope"], has_db, scale_time_costs)
-        t_store = _scope_time_ast(flb["store_scope"], has_db, scale_time_costs)
+        t_load = _scope_time_ast(flb["load_scope"], has_db, scale_time_costs, common)
+        t_comp = _scope_time_ast(flb["compute_scope"], has_db, scale_time_costs, common)
+        t_store = _scope_time_ast(flb["store_scope"], has_db, scale_time_costs, common)
         t_body = Add([t_comp, t_store])
+        if has_db and common is not None:
+            t_load = common.wrap("loop_load", t_load)
+            t_body = common.wrap("loop_body", t_body)
         trip = parse_expr(flb["trip_count"])
         base = Mul(trip, _combine_double_buffer(t_load, t_body, has_db))
         if has_db:

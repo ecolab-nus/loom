@@ -43,7 +43,7 @@ def solve_variant(
     memory_constraints_ast = [
         build_l1_memory_constraint(variant["constraint_scope"]["metadata"])
     ]
-    t_total_ast = compute_total_time_ast(variant)
+    t_total_ast = compute_total_time_ast(variant, use_common_expr=True)
 
     # Add constraints and solve
     ctx.add_hard_constraints(hard_constraints_ast)
