@@ -3,12 +3,22 @@
 
 from __future__ import annotations
 import sys
+from dataclasses import dataclass
 from typing import Any, Callable, TextIO
 
 from ..ast import parse_expr, parse_constraint
 from .analysis import ConstraintAnalysis, ConstraintStatus
 
 CostParser = Callable[[Any], Any]
+
+
+@dataclass(frozen=True)
+class _BlockTiming:
+    total: int
+    load: int
+    compute: int
+    store: int
+    body: int
 
 
 def print_breakdown(
@@ -44,7 +54,10 @@ def print_breakdown(
         temp_product *= v
 
     temp_str = " × ".join(str(v) for v in temp_vals)
-    p(f"Iteration factors:  seq_iter={seq_val},  temp_iter=[{temp_str}]  (product={temp_product})")
+    p(
+        f"Iteration factors:  seq_iter={seq_val},  "
+        f"temp_iter=[{temp_str}]  (product={temp_product})"
+    )
     p()
 
     root = variant.get("kernel_block", variant)
@@ -74,6 +87,18 @@ def _print_block(
     unit: str,
 ) -> int:
     """Recursively print a kernel_block or for_loop_block; return evaluated total cost."""
+    return _print_block_timing(block, assignments, depth, p, cost_parser, unit).total
+
+
+def _print_block_timing(
+    block: dict,
+    assignments: dict,
+    depth: int,
+    p,
+    cost_parser: CostParser,
+    unit: str,
+) -> _BlockTiming:
+    """Print a block and return the evaluated timing components."""
     indent = "  " * depth
 
     t_load = _print_scope(block["load_scope"], assignments, depth, p, cost_parser, unit)
@@ -86,7 +111,13 @@ def _print_block(
     p(f"{indent}T_load={t_load:,}  T_compute={t_comp:,}  "
       f"T_store={t_store:,}  T_compute_store={t_body:,}  "
       f"{'max' if is_db else 'sum'}={t_self:,} {unit}")
-    return t_self
+    return _BlockTiming(
+        total=t_self,
+        load=t_load,
+        compute=t_comp,
+        store=t_store,
+        body=t_body,
+    )
 
 
 def _print_scope(
@@ -127,10 +158,22 @@ def _print_stage(
         flb = stage["for_loop_block"]
         trip = parse_expr(flb["trip_count"]).eval(assignments)
         block_sym = flb.get("block_sym") or "loop"
-        p(f"{indent}Stage {stage_id} [for_loop_block block_sym={block_sym!r} trip={trip}]")
-        inner = _print_block(flb, assignments, depth + 1, p, cost_parser, unit)
-        cost = inner * trip
-        p(f"{indent}  → {inner:,} × {trip} = {cost:,} {unit}")
+        p(
+            f"{indent}Stage {stage_id} "
+            f"[for_loop_block block_sym={block_sym!r} trip={trip}]"
+        )
+        timing = _print_block_timing(flb, assignments, depth + 1, p, cost_parser, unit)
+        inner = timing.total
+        base_cost = inner * trip
+        db_overhead = timing.load if assignments.get("is_double_buffer", 0) else 0
+        cost = base_cost + db_overhead
+        if db_overhead:
+            p(
+                f"{indent}  → {inner:,} × {trip} + "
+                f"db_overhead(load={timing.load:,}) = {cost:,} {unit}"
+            )
+        else:
+            p(f"{indent}  → {inner:,} × {trip} = {cost:,} {unit}")
         return cost
 
     if "Parallel" in stage:
@@ -138,10 +181,17 @@ def _print_stage(
         p(f"{indent}Stage {stage_id} [Parallel × {len(parallel)}]")
         branch_costs = []
         for i, item in enumerate(parallel):
-            scenarios = item["Sequential"]["scenarios"]
+            sequential = item["Sequential"]
+            scenarios = sequential["scenarios"]
             si, cost = _eval_scenario(scenarios, assignments, cost_parser)
-            label = f"Parallel[{i}] scenario[{si}]" if si is not None else f"Parallel[{i}] (no match)"
-            p(f"{indent}  {label:<30s}  {cost if cost is not None else '?':>10} {unit}")
+            label = (
+                f"Parallel[{i}] scenario[{si}]"
+                if si is not None
+                else f"Parallel[{i}] (no match)"
+            )
+            cost_display = cost if cost is not None else "?"
+            p(f"{indent}  {label:<30s}  {cost_display:>10} {unit}")
+            _print_func_breakdown(sequential, assignments, depth + 1, p, cost_parser, unit)
             branch_costs.append(cost or 0)
         stage_cost = max(branch_costs)
         if len(branch_costs) > 1:
@@ -149,6 +199,33 @@ def _print_stage(
         return stage_cost
 
     return 0
+
+
+def _print_func_breakdown(
+    sequential: dict,
+    assignments: dict,
+    depth: int,
+    p,
+    cost_parser: CostParser,
+    unit: str,
+) -> None:
+    """Print Func-level timing for the schedules inside one Sequential branch."""
+    indent = "  " * depth
+    for schedule in sequential.get("schedules", []):
+        func_node = schedule.get("Func") if isinstance(schedule, dict) else None
+        if not func_node:
+            continue
+
+        func = func_node.get("func", {})
+        label = func.get("op_label") or func.get("name") or "<unknown func>"
+        scenarios = func_node.get("scenarios") or []
+        _, cost = (
+            _eval_scenario(scenarios, assignments, cost_parser)
+            if scenarios
+            else (None, None)
+        )
+        cost_display = f"{cost:,}" if cost is not None else "?"
+        p(f"{indent}  {label}: {cost_display} {unit}")
 
 
 def print_active_constraints(
