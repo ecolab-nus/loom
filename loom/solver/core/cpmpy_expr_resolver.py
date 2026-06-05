@@ -12,12 +12,13 @@ import cpmpy as cp
 
 from ...loom_utils.ast import (
     Node, Expr, Constraint,
-    Const, Sym, Add, Mul, Div, Mod, Min, Max, IfElse, Switch,
+    Const, Sym, CommonExpr, Add, Mul, Div, Mod, Min, Max, IfElse, Switch,
     Comparison, Eq, Ne, Ge, Gt, Le, Lt, And, Or, Divisible, Top,
 )
 
 # CPMpy expression type (intvar, comparison result, or plain int)
 CpExpr = Union[cp.expressions.core.Expression, int, bool]
+_COMMON_EXPR_UB = 2**31
 
 
 class ExprResolver:
@@ -27,6 +28,7 @@ class ExprResolver:
         self.symbol_map = symbol_map
         self.aux_constraints: list[CpExpr] = []
         self._switch_counter = 0
+        self._common_expr_cache: dict[str, CpExpr] = {}
 
     def resolve(self, node: Node) -> CpExpr:
         if isinstance(node, Expr):
@@ -47,6 +49,9 @@ class ExprResolver:
             if node.name not in self.symbol_map:
                 raise KeyError(f"Symbol '{node.name}' not found in symbol_map")
             return self.symbol_map[node.name]
+
+        if isinstance(node, CommonExpr):
+            return self._resolve_common_expr(node)
 
         if isinstance(node, Add):
             if not node.operands:
@@ -87,6 +92,15 @@ class ExprResolver:
             return self._resolve_switch(node)
 
         raise ValueError(f"Unknown Expr type: {type(node)}")
+
+    def _resolve_common_expr(self, node: CommonExpr) -> CpExpr:
+        if node.name in self._common_expr_cache:
+            return self._common_expr_cache[node.name]
+
+        aux = cp.intvar(0, _COMMON_EXPR_UB, name=f"_common_{node.name}")
+        self._common_expr_cache[node.name] = aux
+        self.aux_constraints.append(aux == self._resolve_expr(node.expr))
+        return aux
 
     # ------------------------------------------------------------------
     # Switch → indicator variables
