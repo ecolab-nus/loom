@@ -88,6 +88,7 @@ class SolverContext:
         self,
         trip_count_exprs: list[dict],
         labels: list[str] | None = None,
+        require_divisibility: bool = False,
     ) -> None:
         """Add no-oversize constraints for each loop trip-count expression.
 
@@ -122,6 +123,11 @@ class SolverContext:
             denom_cp = resolver._resolve_expr(denom_nodes[0])
             for d in denom_nodes[1:]:
                 denom_cp = denom_cp * resolver._resolve_expr(d)
+
+            if require_divisibility:
+                div_c = num_cp % denom_cp == 0
+                self.model += div_c
+                self._tracked_constraints.append((f"{label}.divisible", div_c))
 
             no_oversize_c = denom_cp <= num_cp
             self.model += no_oversize_c

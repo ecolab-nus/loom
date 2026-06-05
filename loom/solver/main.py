@@ -48,10 +48,17 @@ def solve_variant(
     # Add constraints and solve
     ctx.add_hard_constraints(hard_constraints_ast)
     ctx.add_hard_constraints(memory_constraints_ast, label_prefix="memory_l1")
-    iter_exprs, iter_labels = _collect_iter_num_constraints(
-        variant["constraint_scope"]["metadata"]["iter_num"]
+    seq_iter_exprs, seq_iter_labels, temp_iter_exprs, temp_iter_labels = (
+        _collect_iter_num_constraints(
+            variant["constraint_scope"]["metadata"]["iter_num"]
+        )
     )
-    ctx.add_trip_count_constraints(iter_exprs, labels=iter_labels)
+    ctx.add_trip_count_constraints(
+        seq_iter_exprs,
+        labels=seq_iter_labels,
+        require_divisibility=True,
+    )
+    ctx.add_trip_count_constraints(temp_iter_exprs, labels=temp_iter_labels)
     status, scaled_min_val, assignments = ctx.find_optimum(t_total_ast)
     min_val = scaled_min_val
 
@@ -71,16 +78,20 @@ def solve_variant(
     }
 
 
-def _collect_iter_num_constraints(iter_num: dict) -> tuple[list[dict], list[str]]:
+def _collect_iter_num_constraints(
+    iter_num: dict,
+) -> tuple[list[dict], list[str], list[dict], list[str]]:
     """Collect solver feasibility expressions from constraint metadata."""
-    exprs = [iter_num["seq_iter"]]
-    labels = ["iter_num.seq_iter"]
+    seq_exprs = [iter_num["seq_iter"]]
+    seq_labels = ["iter_num.seq_iter"]
+    temp_exprs = []
+    temp_labels = []
 
     for i, temp_iter in enumerate(iter_num.get("temp_iter", [])):
-        exprs.append(temp_iter)
-        labels.append(f"iter_num.temp_iter[{i}]")
+        temp_exprs.append(temp_iter)
+        temp_labels.append(f"iter_num.temp_iter[{i}]")
 
-    return exprs, labels
+    return seq_exprs, seq_labels, temp_exprs, temp_labels
 
 
 def _parse_solver_time_cost(time_cost: object):
