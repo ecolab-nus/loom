@@ -215,9 +215,13 @@ def run_step_4_materialization(
     logging.info(f"  Output : {p03}")
 
     with pipeline_timer("Step 4: Materialization"):
+        materialization_input = {
+            "__loom_candidate_order__": list(block_sizes),
+            **block_sizes,
+        }
         final_mlir = run_materialization(
             input_mlir=explored_mlir,
-            block_sizes_json=json.dumps(block_sizes),
+            block_sizes_json=json.dumps(materialization_input),
         )
         p03.write_text(final_mlir)
 

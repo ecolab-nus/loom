@@ -365,34 +365,24 @@ def run(
             else:
                 print(f"[{completed:3d}/{total}] {vname}  {status}")
 
-    # Determine global best among OPTIMAL candidates
-    feasible = [r for r in results if r["status"] == "OPTIMAL"]
-    best = min(feasible, key=lambda r: r["scaled_min_val"]) if feasible else None
-
-    topk_filter = _select_topk(feasible, topk_candidates)
-    omitted_by_topk = topk_filter["omitted"]
-    tied_omitted_by_topk = topk_filter["tied_omitted"]
-    tied_omitted_indices = {r["index"] for r in tied_omitted_by_topk}
-    if tied_omitted_by_topk:
-        print("\nTOPK TIE OMITTED")
-        print(
-            f"  topk_candidates={topk_candidates}, cutoff T={topk_filter['cutoff_min_val']:,} solver units, "
-            f"kept={topk_filter['kept_count']}, omitted_tied={len(tied_omitted_by_topk)}"
-        )
-        for r in sorted(tied_omitted_by_topk, key=lambda item: item["index"]):
-            vname = get_variant_name(r["variant"], r["index"])
-            print(f"  [{r['index']:3d}/{total - 1}] {vname}  T={r['min_val']:,} solver units")
+    # Rank solved candidates globally, then take the requested prefix directly.
+    ranked_results = _rank_optimal_results(results)
+    selected_results = (
+        ranked_results[:topk_candidates]
+        if topk_candidates is not None
+        else ranked_results
+    )
+    selected_indices = {r["index"] for r in selected_results}
+    best = ranked_results[0] if ranked_results else None
 
     block_sizes = {
-        get_variant_name(r["variant"], r["index"]): (
-            _materialization_assignments(r, topk_block_size)
-            if r["status"] == "OPTIMAL" and r["index"] not in omitted_by_topk
-            else None
+        get_variant_name(r["variant"], r["index"]): _materialization_assignments(
+            r, topk_block_size
         )
-        for r in results
+        for r in selected_results
     }
 
-    # Overall omit summary (debug-only, index order)
+    # Overall omit summary (debug-only, original candidate order)
     if debug:
         omit_lines = []
         for r in results:
@@ -400,18 +390,21 @@ def run(
             idx = r["index"] + 1
             if r["status"] != "OPTIMAL":
                 omit_lines.append(f"  [{idx:3d}/{total}] {vname}  OMITTED: no feasible solution ({r['status']})")
-            elif r["index"] in omitted_by_topk:
-                if r["index"] in tied_omitted_indices:
-                    omit_lines.append(f"  [{idx:3d}/{total}] {vname}  OMITTED: tied at topk cutoff (T={r['min_val']:,} solver units)")
-                else:
-                    omit_lines.append(f"  [{idx:3d}/{total}] {vname}  OMITTED: outside topk={topk_candidates} (T={r['min_val']:,} solver units)")
+            elif r["index"] not in selected_indices:
+                omit_lines.append(f"  [{idx:3d}/{total}] {vname}  OMITTED: outside topk={topk_candidates} (T={r['min_val']:,} solver units)")
         if omit_lines:
             print("\nOMIT SUMMARY:")
             for line in omit_lines:
                 print(line)
 
     if output_path:
-        _write_detailed_log(results, output_path, total, debug=debug)
+        non_optimal_results = [r for r in results if r["status"] != "OPTIMAL"]
+        _write_detailed_log(
+            ranked_results + non_optimal_results,
+            output_path,
+            total,
+            debug=debug,
+        )
 
     if best:
         print("\nGLOBAL BEST")
@@ -441,33 +434,11 @@ def _materialization_assignments(r: dict, topk_block_size: int) -> Any:
     return sample_block_size_neighbors(assignments, metadata_symbols, topk_block_size)
 
 
-def _select_topk(feasible: list[dict], topk: int | None) -> dict[str, Any]:
-    if topk is None or not feasible:
-        return {
-            "omitted": set(),
-            "tied_omitted": [],
-            "cutoff_min_val": None,
-            "kept_count": len(feasible),
-        }
-
-    top_results = sorted(feasible, key=lambda r: (r["scaled_min_val"], r["index"]))[:topk]
-    kept_by_topk = {r["index"] for r in top_results}
-    cutoff_min_val = top_results[-1]["min_val"] if top_results else None
-    cutoff_scaled_min_val = top_results[-1]["scaled_min_val"] if top_results else None
-    omitted: set[int] = set()
-    tied_omitted = []
-    for r in feasible:
-        if r["index"] not in kept_by_topk:
-            omitted.add(r["index"])
-            if cutoff_scaled_min_val is not None and r["scaled_min_val"] == cutoff_scaled_min_val:
-                tied_omitted.append(r)
-
-    return {
-        "omitted": omitted,
-        "tied_omitted": tied_omitted,
-        "cutoff_min_val": cutoff_min_val,
-        "kept_count": len(top_results),
-    }
+def _rank_optimal_results(results: list[dict]) -> list[dict]:
+    return sorted(
+        (r for r in results if r["status"] == "OPTIMAL"),
+        key=lambda r: (r["scaled_min_val"], r["index"]),
+    )
 
 
 def _positive_int(value: str) -> int:
