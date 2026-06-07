@@ -88,10 +88,26 @@ def _collect_iter_num_constraints(
     temp_labels = []
 
     for i, temp_iter in enumerate(iter_num.get("temp_iter", [])):
-        temp_exprs.append(temp_iter)
-        temp_labels.append(f"iter_num.temp_iter[{i}]")
+        label = f"iter_num.temp_iter[{i}]"
+        if _contains_symbol(temp_iter, "tile_b"):
+            seq_exprs.append(temp_iter)
+            seq_labels.append(label)
+        else:
+            temp_exprs.append(temp_iter)
+            temp_labels.append(label)
 
     return seq_exprs, seq_labels, temp_exprs, temp_labels
+
+
+def _contains_symbol(expr: object, symbol: str) -> bool:
+    """Return whether a serialized expression contains the named Sym node."""
+    if isinstance(expr, dict):
+        if expr == {"Sym": symbol}:
+            return True
+        return any(_contains_symbol(value, symbol) for value in expr.values())
+    if isinstance(expr, list):
+        return any(_contains_symbol(value, symbol) for value in expr)
+    return False
 
 
 def _parse_solver_time_cost(time_cost: object):
