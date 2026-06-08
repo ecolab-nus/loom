@@ -40,7 +40,8 @@ def _mqa_decode(
     sm_scale = 1.0 / math.sqrt(head_dim)
     out_ = torch.zeros([batch, num_q_head, head_dim], dtype=torch.float16)
 
-    for tile_b, tile_s in hl.tile([batch, kvseq_len]):
+    block_s = hl.register_block_size(kvseq_len)
+    for tile_b, tile_s in hl.tile([batch, kvseq_len], block_size=[1, block_s]):
         qk_scale = hl.full([], sm_scale, dtype=torch.float16)
 
         m_i = hl.full([tile_b, num_q_head, 1], float("-inf"), dtype=torch.float16)
