@@ -20,3 +20,7 @@ test/*/constraints/
 
 # testcases
 test/
+
+# tmp logs
+tmp_logs/
+test*.sh
