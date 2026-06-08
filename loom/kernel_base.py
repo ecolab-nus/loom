@@ -109,12 +109,22 @@ class LoomKernel:
     ``assume_divisible_tiles: bool``
         Passed to ``helion_mlir.generate_mlir``. When true, lowering assumes
         tile bounds are divisible and may omit dynamic tail handling.
+
+    ``tile_upper_bounds: dict[str | int, int] | None``
+        Optional per-tile upper-bound overrides passed to
+        ``helion_mlir.generate_mlir``.
+
+    ``assume_divisible_tile_bounds: dict[str | int, bool] | None``
+        Optional per-tile divisibility assumptions. Entries with a true value
+        are passed to ``helion_mlir.generate_mlir`` as ``divisible_tiles``.
     """
 
     # Override in subclass for a nicer description in --help.
     kernel_name: ClassVar[str] = ""
     # Override per kernel to control Helion MLIR lowering behavior.
     assume_divisible_tiles: ClassVar[bool] = False
+    tile_upper_bounds: ClassVar[dict[str | int, int] | None] = None
+    assume_divisible_tile_bounds: ClassVar[dict[str | int, bool] | None] = None
 
     # ------------------------------------------------------------------ #
     # Subclass interface                                                   #
@@ -152,9 +162,20 @@ class LoomKernel:
         args = cls.bind_args()
         bound = cls.kernel.bind(args)
         print_debug_info(bound)
+        divisible_tiles = (
+            [
+                tile
+                for tile, assume_divisible in cls.assume_divisible_tile_bounds.items()
+                if assume_divisible
+            ]
+            if cls.assume_divisible_tile_bounds is not None
+            else ()
+        )
         return _helion_generate_mlir(
             bound,
             assume_divisible_tiles=cls.assume_divisible_tiles,
+            divisible_tiles=divisible_tiles,
+            tile_upper_bounds=cls.tile_upper_bounds,
         )
 
     # ------------------------------------------------------------------ #
