@@ -2,7 +2,7 @@
 
 Standalone CLI script. Run from the repo root:
 
-    python kernels/mqa_decode.py --config kernels/config_files/mqa_decode.json --njobs 8 --debug --topk-candidates 5 --topk-block-size 3
+    python kernels/mqa_decode.py --config kernels/config_files/mqa_decode.json --njobs 8 --debug --topk-candidates 1 --topk-block-size 1
 
 This script inherits the full Loom CLI and pipeline from LoomKernel.
 To write your own kernel, copy this file, replace the kernel body
@@ -99,10 +99,10 @@ class MQADecode(LoomKernel):
 
     B: int = 8
     H: int = 32
-    L: int = 4096
+    L: int = 1024
     D: int = 64
 
-    assume_divisible_tiles: bool = True
+    assume_divisible: bool = True
 
     kernel = helion.kernel(
         static_shapes=False,

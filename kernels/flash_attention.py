@@ -77,7 +77,7 @@ class FlashAttention(LoomKernel):
     d: int = int(1024 * 64 / H)
     _logical_B: int = B
 
-    assume_divisible_tiles = True
+    assume_divisible = True
 
     # Assign the helion-decorated function as a class attribute.
     # We cannot stack @staticmethod with @helion.kernel because the helion

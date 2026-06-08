@@ -191,7 +191,7 @@ class MambaChunkScan(LoomKernel):
     DSTATE: int = 128
     CHUNK_SIZE: int = 512
 
-    assume_divisible_tiles: bool = True    
+    assume_divisible: bool = True
 
     kernel = helion.kernel(
         static_shapes=False,
