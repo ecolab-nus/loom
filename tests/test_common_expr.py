@@ -56,7 +56,7 @@ def _variant(load_cost: int, compute_cost: int) -> dict:
             "metadata": {
                 "symbols": {},
                 "booleans": ["is_double_buffer"],
-                "iter_num": {"seq_iter": _const(1), "temp_iter": []},
+                "iter_num": {"seq_iter": [_const(1), False], "temp_iter": []},
             },
             "hard_constraints": [],
         },

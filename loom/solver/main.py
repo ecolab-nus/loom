@@ -82,13 +82,15 @@ def _collect_iter_num_constraints(
     iter_num: dict,
 ) -> tuple[list[dict], list[str], list[dict], list[str]]:
     """Collect solver feasibility expressions from constraint metadata."""
-    seq_exprs = [iter_num["seq_iter"]]
+    seq_iter, _ = _unpack_iter_num(iter_num["seq_iter"], "iter_num.seq_iter")
+    seq_exprs = [seq_iter]
     seq_labels = ["iter_num.seq_iter"]
     temp_exprs = []
     temp_labels = []
 
-    for i, temp_iter in enumerate(iter_num.get("temp_iter", [])):
+    for i, raw_temp_iter in enumerate(iter_num.get("temp_iter", [])):
         label = f"iter_num.temp_iter[{i}]"
+        temp_iter, _ = _unpack_iter_num(raw_temp_iter, label)
         if _contains_symbol(temp_iter, "tile_b"):
             seq_exprs.append(temp_iter)
             seq_labels.append(label)
@@ -97,6 +99,18 @@ def _collect_iter_num_constraints(
             temp_labels.append(label)
 
     return seq_exprs, seq_labels, temp_exprs, temp_labels
+
+
+def _unpack_iter_num(raw: object, label: str) -> tuple[dict, bool]:
+    """Decode an [expression, asure_divisible] iteration metadata pair."""
+    if (
+        not isinstance(raw, list)
+        or len(raw) != 2
+        or not isinstance(raw[0], dict)
+        or not isinstance(raw[1], bool)
+    ):
+        raise ValueError(f"{label} must be [expression, bool]")
+    return raw[0], raw[1]
 
 
 def _contains_symbol(expr: object, symbol: str) -> bool:
