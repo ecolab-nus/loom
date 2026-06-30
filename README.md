@@ -2,61 +2,68 @@
 
 # Loom Monorepo
 
-Loom is an end-to-end compilation pipeline for ML kernels targeting spatial hardware architectures. It takes high-level kernel descriptions (written in [Helion](https://github.com/pytorch-labs/helion)) and compiles them through a multi-stage pipeline — MLIR lowering, dataflow exploration, symbolic architecture evaluation, and SMT-based block-size optimization — to produce optimized, bufferized MLIR ready for code generation.
+Loom is an end-to-end compilation stack for ML kernels targeting spatial hardware architectures. The project is organized around four subrepos plus a root Python package that connects them into one workflow.
 
-## Repository Structure
+## Four Subrepos
+
+| Subrepo | Responsibility |
+|---------|----------------|
+| `third_party/helion-mlir` | Lowers Helion kernels into high-level MLIR with affine control flow and linalg-on-tensors compute. |
+| `third_party/loom-dataflow` | Runs MLIR exploration/materialization passes, emits ETG JSON, and exposes the C++ pipeline through Python bindings. |
+| `third_party/loom-mlar` | Describes hardware with MLAR and resolves ETG schedules against architecture performance models. |
+| `third_party/loom2ttkernel` | Optionally lowers Loom-produced bufferized MLIR into TTKernel/tt-mlir/tt-metal style codegen inputs. |
+
+## Root Repo Responsibilities
+
+The root repo is the glue layer and active solver package for the stack:
 
 ```
 loom-monorepo/
-├── loom/                    # Root Python package — pipeline orchestrator & SMT solver
-│   ├── pipeline.py          # End-to-end pipeline (Steps 0–4)
-│   ├── kernel_base.py       # LoomKernel base class with built-in CLI
-│   ├── smt/                 # Z3-based SMT solver for block-size optimization
-│   └── loom_utils/          # MLAR evaluator bridge, ETG resolver, timers
-├── kernels/                 # Example kernel scripts (e.g., matmul)
-│   ├── matmul.py            # Matrix-multiply kernel using Helion + LoomKernel
-│   └── config.json          # Sample configuration file
-├── scripts/                 # Developer scripts
-│   ├── preflight.sh         # Pre-flight dependency checker
-│   └── build-mlar.sh        # Builds the loom-mlar eval_core binary
-├── install-dev.sh           # One-click developer install
-├── test/                    # Integration test artifacts
-└── third_party/             # Git submodules
-    ├── helion-mlir/         # Python: Helion kernel → MLIR frontend
-    ├── loom-dataflow/       # C++/Python: MLIR exploration & materialization passes
-    ├── loom-mlar/           # Rust: architecture modeling & symbolic evaluator
-    └── loom2ttkernel/       # C++: TileLoom-to-TTKernel lowering
+├── loom/                    # Python orchestration package
+│   ├── pipeline.py          # End-to-end pipeline stages and output layout
+│   ├── kernel_base.py       # LoomKernel base class and inherited kernel CLI
+│   ├── solver/              # CPMpy/CP-SAT block-size optimizer
+│   └── loom_utils/          # ETG loading, MLAR bridge, AST/modeling helpers, timers
+├── kernels/                 # Example kernel entrypoints and config files
+├── scripts/                 # Install, preflight, and MLAR build helpers
+├── install-dev.sh           # Developer install script for the core stack
+├── test/                    # Generated/integration artifacts
+├── tests/                   # Python regression tests
+└── third_party/             # The four subrepos listed above
 ```
+
+The root `loom` package connects the subrepos in process: it asks `helion-mlir` for stage-00 MLIR, calls `loom-dataflow` Python bindings for exploration and materialization, sends ETG variants through `loom-mlar`, and uses the active `loom.solver` CPMpy/CP-SAT optimizer to choose block-size assignments. The solver consumes resolved ETG constraints and timing expressions, searches finite symbol domains, and returns per-candidate block sizes for materialization.
 
 ## Compilation Pipeline
 
-The Loom pipeline consists of five stages:
-
 | Stage | Name | Component | Description |
 |-------|------|-----------|-------------|
-| 0 | **Helion Frontend** | `helion-mlir` | Converts a Helion kernel into high-level MLIR (affine + linalg-on-tensors) |
-| 1 | **Exploration** | `loom-dataflow` | Applies C++ MLIR passes to explore hardware mappings and produce an Exploration Task Graph (ETG) |
-| 2 | **ETG Resolution** | `loom-mlar` | Evaluates ETG variants against a symbolic architecture model via the Rust evaluator |
-| 3 | **SMT Solver** | `loom.smt` | Uses Z3 to find optimal block sizes satisfying all hardware constraints |
-| 4 | **Materialization** | `loom-dataflow` | Applies the solved block sizes and lowers MLIR to bufferized form |
+| 0 | **Helion Frontend** | `helion-mlir` | Converts a bound Helion kernel into high-level MLIR. |
+| 1 | **Dataflow Exploration** | `loom-dataflow` | Explores hardware mappings, annotates reuse/copy choices, and emits explored MLIR plus ETG JSON. |
+| 2 | **ETG Resolution** | `loom-mlar` | Resolves ETG variants against architecture performance models. |
+| 3 | **Block-Size Solve** | `loom.solver` | Uses CPMpy/CP-SAT to find feasible, low-cost block-size assignments. |
+| 4 | **Materialization** | `loom-dataflow` | Applies selected block sizes and lowers tensor IR to bufferized Loom MLIR. |
+| 5 | **Optional TT Lowering** | `loom2ttkernel` | Lowers bufferized Loom MLIR toward TTKernel codegen when that backend is installed. |
 
-## Third-Party Submodules
+When `assigned_block_size` is provided, the root pipeline bypasses Stage 3 and sends those values directly to materialization. In debug mode, Loom can still generate and resolve ETG data to produce manual latency breakdowns.
 
-### helion-mlir
+## Subrepo Notes
 
-A Python frontend that lowers Helion kernels (Device IR FX graphs) into high-level MLIR with affine and linalg-on-tensors dialects. It maps Helion control flow to `affine.for`/`affine.parallel`, converts memory operations to tensor IR, and integrates torch-mlir for ATen operation lowering. This replaces Helion's default Triton lowering with a more architecture-friendly IR.
+### `helion-mlir`
 
-### loom-dataflow
+Python frontend for Helion kernels. It starts from Helion Device IR FX graphs, maps control flow to `affine.for`/`affine.parallel`, represents memory updates with tensor IR, and uses torch-mlir for ATen/linalg lowering.
 
-The core MLIR-backed compiler infrastructure for exploring hardware scale-out models and dataflow patterns. It provides a custom MLIR `df` dialect for describing spatial dimensions and interconnect topologies, C++ passes that affinize kernels, tile affine loops, enumerate spatial hardware mappings, and analyze reuse patterns. Built as a C++ library with pybind11 bindings exposed to Python.
+### `loom-dataflow`
 
-### loom-mlar
+C++/MLIR compiler infrastructure with pybind11 bindings. It owns the ADL and Loom dialect pieces, exploration passes, ETG generation, materialization, one-shot bufferization, and TT-oriented cleanup passes.
 
-A Rust library implementing the Multi-Level Architecture Representation (MLAR) for composable, symbolic hardware description. It supports recursive architecture composition (Unit → Array → Graph), symbolic performance modeling with constraints, and generates an evaluator binary (`eval_core`) that accepts Schedule JSON on stdin and outputs evaluated performance scenarios.
+### `loom-mlar`
 
-### loom2ttkernel
+Rust MLAR library for architecture description and schedule evaluation. The root install builds the 2D-mesh evaluator binary used by the pipeline unless MLAR is skipped or a compatible prebuilt evaluator is supplied.
 
-A TileLoom-to-TTKernel lowering project. This third-party submodule is included in the repository, but `install-dev.sh` does not build it because it requires dependencies outside the default Loom developer setup. To build `loom2ttkernel`, first install [tt-metal](https://github.com/tenstorrent/tt-metal) and [tt-mlir](https://github.com/tenstorrent/tt-mlir).
+### `loom2ttkernel`
+
+Optional backend project for lowering bufferized Loom MLIR into TTKernel/tt-mlir flows. It is included as a submodule but is not built by `install-dev.sh` because it requires external Tenstorrent dependencies.
 
 ## Quick Start
 
@@ -64,32 +71,29 @@ A TileLoom-to-TTKernel lowering project. This third-party submodule is included 
 
 - Python 3.10+
 
-Optional (for building all components from source):
-- CMake ≥ 3.20, Ninja, lld, a C++17 compiler, and a pre-built MLIR installation (for `loom-dataflow`)
-- Rust toolchain (for `loom-mlar`)
+Optional, depending on which components you build:
+- CMake >= 3.20, Ninja, lld, a C++17 compiler, and an MLIR installation for `loom-dataflow`
+- Rust toolchain for `loom-mlar`
+- tt-metal and tt-mlir for `loom2ttkernel`
 
 ### Installation
 
-Create a Python 3.10 environment and run the one-click install script:
+Create a Python 3.10 environment and run the developer install script:
 
 ```bash
-# Using conda (recommended)
 conda create -n loom python=3.10 -y
 conda activate loom
 
-# Install the core Loom pipeline
 bash install-dev.sh
 ```
 
-That's it. The install script handles git submodule initialization, dependency checks, and building/installing the core pipeline subprojects in the correct order.
-
-If you have a custom MLIR installation, pass the path with `--mlir-dir`:
+If you have a custom MLIR installation, pass it explicitly:
 
 ```bash
 bash install-dev.sh --mlir-dir=/path/to/your/mlir/lib/cmake/mlir
 ```
 
-Alternatively, set the `MLIR_DIR` environment variable:
+or set `MLIR_DIR`:
 
 ```bash
 export MLIR_DIR=/path/to/your/mlir/lib/cmake/mlir
@@ -111,53 +115,61 @@ Options:
 
 Environment variables:
   MLIR_DIR            Path to MLIR cmake config directory
-  LOOM_EVAL_CORE      Path to a pre-built eval_core binary (skips the Rust build)
+  LOOM_EVAL_SYSTEM    Path to a pre-built eval_system binary
 ```
 
-The script will automatically detect missing optional dependencies and skip the corresponding components with a warning, so you can get started even without CMake or Rust installed.
+The script initializes submodules, checks dependencies, installs `loom-dataflow` and `helion-mlir` in editable mode, builds the MLAR evaluator when available, and installs the root `loom` package.
 
 ## Usage
 
 ### Running a Kernel
 
-Kernel scripts inherit a full CLI from `LoomKernel`. The recommended way is to use a config file:
+Kernel scripts inherit a CLI from `LoomKernel`. The recommended path is a config file:
 
 ```bash
-python kernels/matmul.py --config kernels/config.json --njobs 16 --debug
+python kernels/matmul.py --config kernels/config_files/matmul.json --njobs 16 --debug
 ```
 
 Or pass paths explicitly:
 
 ```bash
 python kernels/matmul.py \
-    --output-path test/mm_2Dmesh \
-    --df-mlir third_party/loom-dataflow/test/Dialect/DataflowDialect/2D_mesh.mlir \
-    --hw-compute-dir third_party/loom-mlar/tests/2d_mesh/compute \
-    --njobs 16 --debug
+  --output-path test/matmul_2Dmesh \
+  --hw-spec third_party/loom-mlar/tests/2d_mesh/2d_mesh_torus.mlir \
+  --njobs 16 \
+  --debug
 ```
 
 ### Configuration File
 
-The config file is a JSON object specifying hardware paths and optional overrides:
+The config file is a JSON object specifying output and hardware paths, plus optional solver controls:
 
 ```json
 {
-    "output_path": "test/mm_2Dmesh",
-    "df_mlir": "third_party/loom-dataflow/test/Dialect/DataflowDialect/2D_mesh.mlir",
-    "hw_compute_dir": "third_party/loom-mlar/tests/2d_mesh/compute",
-    "block_sizes": {
-        "block_size_0": 128,
-        "block_size_1": 32,
-        "block_size_2": 128
-    }
+  "output_path": "test/matmul_2Dmesh",
+  "hw_spec": "third_party/loom-mlar/tests/2d_mesh/2d_mesh_torus.mlir",
+  "block_sizes": {
+    "tile_m": {"lb": 32, "ub": 256},
+    "tile_n": {"lb": 32, "ub": 256}
+  }
 }
 ```
 
-When `block_sizes` is provided, Steps 2 and 3 (ETG resolution and SMT solving) are skipped, and the given values are used directly for materialization.
+Use `assigned_block_size` to bypass the solver and materialize explicit assignments:
+
+```json
+{
+  "output_path": "test/matmul_2Dmesh",
+  "hw_spec": "third_party/loom-mlar/tests/2d_mesh/2d_mesh_torus.mlir",
+  "assigned_block_size": {
+    "ALL": {"tile_m": 128, "tile_n": 128, "tile_k": 64}
+  }
+}
+```
 
 ### Writing a New Kernel
 
-1. Create a new Python file under `kernels/`.
+1. Create a Python file under `kernels/`.
 2. Define a Helion kernel function and wrap it with `helion.kernel()`.
 3. Subclass `LoomKernel`, set the `kernel` attribute, and implement `bind_args()`.
 4. Add the standard `__main__` block.
@@ -165,7 +177,6 @@ When `block_sizes` is provided, Steps 2 and 3 (ETG resolution and SMT solving) a
 ```python
 import torch
 import helion
-import helion.language as hl
 from loom import LoomKernel
 
 def _my_kernel(x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
@@ -178,8 +189,10 @@ class MyKernel(LoomKernel):
 
     @classmethod
     def bind_args(cls):
-        return (torch.randn([1024, 512], dtype=torch.float16),
-                torch.randn([512, 1024], dtype=torch.float16))
+        return (
+            torch.randn([1024, 512], dtype=torch.float16),
+            torch.randn([512, 1024], dtype=torch.float16),
+        )
 
 if __name__ == "__main__":
     MyKernel.run()
@@ -198,13 +211,13 @@ After a successful run, the output directory contains:
 └── constraints/
     ├── p01_exploration_etg.json
     ├── p02_resolved_etg.json
-    └── smt_solver.log                  (--debug only)
+    └── solver.log                      (--debug only)
 ```
 
 ## Scripts
 
 | Script | Description |
 |--------|-------------|
-| `install-dev.sh` | One-click developer install — initializes submodules, runs pre-flight checks, and installs the core pipeline subprojects in editable mode |
-| `scripts/preflight.sh` | Checks for all required dependencies (Python, pip, cmake, ninja, lld, C++ compiler, MLIR, Rust) and reports what is missing |
-| `scripts/build-mlar.sh` | Builds the `loom-mlar` eval_core evaluator binary via `cargo test` and copies it to `third_party/loom-mlar/bin/eval_core` |
+| `install-dev.sh` | Initializes submodules, runs preflight checks, installs core Python/C++ subprojects, and builds the MLAR evaluator when possible. |
+| `scripts/preflight.sh` | Checks required Python, build, MLIR, and Rust dependencies. |
+| `scripts/build-mlar.sh` | Builds the `loom-mlar` `eval_system` evaluator binary used by the root pipeline. |
