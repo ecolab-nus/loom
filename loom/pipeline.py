@@ -117,6 +117,7 @@ def run_step_1_exploration(
             hw_spec_file=hw_spec,
             produce_etg=True,
             skip_etg=skip_etg,
+            # spatial_reuse=False
         )
         if not skip_etg:
             exploration_etg.write_text(etg_json_text)
