@@ -27,6 +27,7 @@
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")" && pwd)"
+PYTHON="${PYTHON:-python3}"
 SKIP_MLAR=0
 SKIP_DATAFLOW=0
 SKIP_HELION=0
@@ -52,8 +53,11 @@ for arg in "$@"; do
 done
 
 export MLIR_DIR="${MLIR_DIR:-/opt/llvm-mlir/lib/cmake/mlir}"
+export PYTHON
 export SKIP_DATAFLOW
 export SKIP_MLAR
+# The Rust pre-flight check follows the same skip contract as the build step.
+export SKIP_RUST="$SKIP_MLAR"
 
 # ---------------------------------------------------------------------------
 # Step 0: Git submodules
@@ -76,43 +80,36 @@ if ! run_preflight_checks; then
 fi
 
 # ---------------------------------------------------------------------------
-# Step 2: Auto-install missing Python build dependencies
-# ---------------------------------------------------------------------------
-if [ -n "${LOOM_NEED_BUILD_DEPS:-}" ]; then
-    echo ""
-    echo "=== Installing missing Python build deps: $LOOM_NEED_BUILD_DEPS ==="
-    pip install $LOOM_NEED_BUILD_DEPS
-fi
-
-# ---------------------------------------------------------------------------
-# Step 3: loom-dataflow (C++ MLIR pipeline)
+# Step 2: loom-dataflow (C++ MLIR pipeline)
 # ---------------------------------------------------------------------------
 if [ "$LOOM_CAN_BUILD_DATAFLOW" = "1" ] && [ "$SKIP_DATAFLOW" = "0" ]; then
     echo ""
     echo "=== Installing loom-dataflow (editable, triggers CMake build) ==="
-    pip install -e "$REPO_ROOT/third_party/loom-dataflow" -v --no-build-isolation
+    "$PYTHON" -m pip install -e "$REPO_ROOT/third_party/loom-dataflow" -v
 else
     echo ""
     echo "[SKIP] loom-dataflow (missing dependencies or --skip-dataflow)"
 fi
 
 # ---------------------------------------------------------------------------
-# Step 4: helion-mlir (Python)
+# Step 3: helion-mlir (Python)
 # ---------------------------------------------------------------------------
 if [ "$SKIP_HELION" = "0" ]; then
     echo ""
     echo "=== Installing helion-mlir (editable) ==="
-    # torch-mlir dev wheels are not on PyPI; use the find-links URL from
-    # helion-mlir/requirements.txt so pip can locate the package.
-    pip install -e "$REPO_ROOT/third_party/helion-mlir" \
-        -f https://github.com/llvm/torch-mlir-release/releases/expanded_assets/dev-wheels
+    # The requirements file provides the CPU-only Torch index and the
+    # torch-mlir dev-wheel source, then installs this project in editable mode.
+    (
+        cd "$REPO_ROOT/third_party/helion-mlir"
+        "$PYTHON" -m pip install -r requirements.txt
+    )
 else
     echo ""
     echo "[SKIP] helion-mlir (--skip-helion)"
 fi
 
 # ---------------------------------------------------------------------------
-# Step 5: loom-mlar (Rust evaluator binary)
+# Step 4: loom-mlar (Rust evaluator binary)
 # ---------------------------------------------------------------------------
 if [ "$LOOM_HAS_CARGO" = "1" ] && [ "$SKIP_MLAR" = "0" ]; then
     if [ -n "${LOOM_EVAL_CORE:-}" ] && [ -x "${LOOM_EVAL_CORE}" ]; then
@@ -129,11 +126,11 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# Step 6: Root loom package
+# Step 5: Root loom package
 # ---------------------------------------------------------------------------
 echo ""
 echo "=== Installing loom (editable) ==="
-pip install -e "$REPO_ROOT"
+"$PYTHON" -m pip install -e "$REPO_ROOT"
 
 # ---------------------------------------------------------------------------
 # Summary
@@ -144,7 +141,7 @@ echo "  Loom monorepo install complete"
 echo "============================================"
 
 _check_import() {
-    if python3 -c "import $1" 2>/dev/null; then
+    if "$PYTHON" -c "import $1" 2>/dev/null; then
         printf "  %-16s %s\n" "$1" "OK"
     else
         printf "  %-16s %s\n" "$1" "NOT INSTALLED"

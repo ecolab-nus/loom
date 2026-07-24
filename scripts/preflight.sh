@@ -49,9 +49,10 @@ check_submodules() {
 }
 
 check_python() {
-    if command -v python3 &>/dev/null; then
+    local python="${PYTHON:-python3}"
+    if command -v "$python" &>/dev/null; then
         local ver
-        ver=$(python3 -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')
+        ver=$("$python" -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')
         local major minor
         major=$(echo "$ver" | cut -d. -f1)
         minor=$(echo "$ver" | cut -d. -f2)
@@ -62,14 +63,15 @@ check_python() {
             (( _PREFLIGHT_ERRORS++ ))
         fi
     else
-        _fail "python3 not found"
+        _fail "Python interpreter not found: $python"
         _hint "Install Python 3.10+ from https://www.python.org/downloads/"
         (( _PREFLIGHT_ERRORS++ ))
     fi
 }
 
 check_pip() {
-    if python3 -m pip --version &>/dev/null; then
+    local python="${PYTHON:-python3}"
+    if "$python" -m pip --version &>/dev/null; then
         _ok "pip"
     else
         _fail "pip not found"
@@ -153,21 +155,6 @@ check_mlir_dir() {
     fi
 }
 
-check_python_build_deps() {
-    local missing=()
-    python3 -c "import scikit_build_core" &>/dev/null || missing+=("scikit-build-core")
-    python3 -c "import pybind11" &>/dev/null || missing+=("pybind11")
-
-    if [ ${#missing[@]} -eq 0 ]; then
-        _ok "Python build deps (scikit-build-core, pybind11)"
-    else
-        _warn "Missing Python build deps: ${missing[*]}"
-        _hint "Will auto-install: pip install ${missing[*]}"
-        LOOM_NEED_BUILD_DEPS="${missing[*]}"
-        (( _PREFLIGHT_WARNINGS++ ))
-    fi
-}
-
 check_cargo() {
     if command -v cargo &>/dev/null && command -v rustc &>/dev/null; then
         local ver
@@ -196,12 +183,11 @@ run_preflight_checks() {
     check_pip
 
     if [ "${SKIP_DATAFLOW:-0}" != "1" ]; then
-        #check_cmake
+        check_cmake
         check_ninja
         check_lld
         check_cxx_compiler
         check_mlir_dir
-        check_python_build_deps
     else
         _warn "Skipping loom-dataflow checks (--skip-dataflow)"
         LOOM_CAN_BUILD_DATAFLOW=0

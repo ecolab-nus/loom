@@ -114,6 +114,7 @@ Options:
   --help              Show help message
 
 Environment variables:
+  PYTHON              Python 3.10+ interpreter used for every pip/install check
   MLIR_DIR            Path to MLIR cmake config directory
   LOOM_EVAL_SYSTEM    Path to a pre-built eval_system binary
 ```
