@@ -1,46 +1,45 @@
 #!/bin/bash
 # One-click developer install for the Loom monorepo.
 #
-# Installs the core pipeline subprojects in editable mode in the correct order:
+# Prepares the core pipeline development environment:
 #   1. Git submodule init/update
-#   2. Pre-flight dependency checks
-#   3. loom-dataflow  (C++ MLIR pipeline, triggers CMake build)
-#   4. helion-mlir    (Python, Helion-to-MLIR lowering)
-#   5. loom-mlar      (Rust evaluator binary)
-#   6. loom           (root orchestrator meta-package)
+#   2. Pre-flight system dependency checks
+#   3. Stage 1: uv sync (Python dependencies and Helion)
+#   4. Stage 2: bundled LLVM/MLIR, loom-dataflow, and loom-mlar
 #
 # Usage:
 #   bash install-dev.sh [OPTIONS]
 #
 # Options:
-#   --mlir-dir=PATH     Path to MLIR cmake config
-#                        (default: $MLIR_DIR or /opt/llvm-mlir/lib/cmake/mlir)
 #   --skip-mlar         Skip building the loom-mlar Rust evaluator
 #   --skip-dataflow     Skip building loom-dataflow (C++ MLIR passes)
 #   --skip-helion       Skip installing helion-mlir
+#   --rebuild-dataflow  Force rebuilding loom-dataflow
 #   --help              Show this help message
 #
 # Environment:
-#   MLIR_DIR            Path to MLIR cmake config directory
+#   LOOM_LLVM_JOBS      Parallel jobs for the bundled LLVM/MLIR build
 #   LOOM_EVAL_SYSTEM    Path to pre-built eval_system binary (skips Rust build)
 
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")" && pwd)"
-PYTHON="${PYTHON:-python3}"
+LLVM_BUILD_DIR="$REPO_ROOT/build/llvm-6ad25c59"
+export MLIR_DIR="$LLVM_BUILD_DIR/lib/cmake/mlir"
 SKIP_MLAR=0
 SKIP_DATAFLOW=0
 SKIP_HELION=0
+REBUILD_DATAFLOW=0
 
 # ---------------------------------------------------------------------------
 # Parse arguments
 # ---------------------------------------------------------------------------
 for arg in "$@"; do
     case "$arg" in
-        --mlir-dir=*)    export MLIR_DIR="${arg#*=}" ;;
-        --skip-mlar)     SKIP_MLAR=1 ;;
-        --skip-dataflow) SKIP_DATAFLOW=1 ;;
-        --skip-helion)   SKIP_HELION=1 ;;
+        --skip-mlar)        SKIP_MLAR=1 ;;
+        --skip-dataflow)    SKIP_DATAFLOW=1 ;;
+        --skip-helion)      SKIP_HELION=1 ;;
+        --rebuild-dataflow) REBUILD_DATAFLOW=1 ;;
         --help)
             sed -n '2,/^$/p' "$0" | sed 's/^# \?//'
             exit 0
@@ -52,12 +51,8 @@ for arg in "$@"; do
     esac
 done
 
-export MLIR_DIR="${MLIR_DIR:-/opt/llvm-mlir/lib/cmake/mlir}"
-export PYTHON
 export SKIP_DATAFLOW
 export SKIP_MLAR
-# The Rust pre-flight check follows the same skip contract as the build step.
-export SKIP_RUST="$SKIP_MLAR"
 
 # ---------------------------------------------------------------------------
 # Step 0: Git submodules
@@ -80,41 +75,67 @@ if ! run_preflight_checks; then
 fi
 
 # ---------------------------------------------------------------------------
-# Step 2: loom-dataflow (C++ MLIR pipeline)
+# Stage 1: Sync Python dependencies without building loom-dataflow
+#
+# Keep this separate from the native extension build below. If that build
+# fails, the resolved Python environment remains installed and can be reused
+# on the next run. --inexact also preserves a previously working dataflow
+# installation until its replacement has built successfully.
 # ---------------------------------------------------------------------------
+UV_SYNC_ARGS=(sync --project "$REPO_ROOT" --locked --inexact)
+INSTALL_DATAFLOW=0
 if [ "$LOOM_CAN_BUILD_DATAFLOW" = "1" ] && [ "$SKIP_DATAFLOW" = "0" ]; then
-    echo ""
-    echo "=== Installing loom-dataflow (editable, triggers CMake build) ==="
-    "$PYTHON" -m pip install -e "$REPO_ROOT/third_party/loom-dataflow" -v
+    INSTALL_DATAFLOW=1
+    UV_SYNC_ARGS+=(--extra dataflow --no-install-package loom-dataflow)
 else
-    echo ""
-    echo "[SKIP] loom-dataflow (missing dependencies or --skip-dataflow)"
+    echo "[SKIP] loom-dataflow Python package (missing dependencies or --skip-dataflow)"
 fi
 
-# ---------------------------------------------------------------------------
-# Step 3: helion-mlir (Python)
-# ---------------------------------------------------------------------------
 if [ "$SKIP_HELION" = "0" ]; then
-    echo ""
-    echo "=== Installing helion-mlir (editable) ==="
-    # The requirements file provides the CPU-only Torch index and the
-    # torch-mlir dev-wheel source, then installs this project in editable mode.
-    (
-        cd "$REPO_ROOT/third_party/helion-mlir"
-        "$PYTHON" -m pip install -r requirements.txt
-    )
+    UV_SYNC_ARGS+=(--extra helion)
 else
+    echo "[SKIP] helion-mlir Python package (--skip-helion)"
+fi
+
+echo ""
+echo "=== Stage 1/2: Syncing Python environment (excluding loom-dataflow build) ==="
+uv "${UV_SYNC_ARGS[@]}"
+
+# ---------------------------------------------------------------------------
+# Stage 2: Build native components
+# ---------------------------------------------------------------------------
+echo ""
+echo "=== Stage 2/2: Building native components ==="
+
+if [ "$INSTALL_DATAFLOW" = "1" ]; then
+    bash "$REPO_ROOT/scripts/build-llvm.sh"
+
+    DATAFLOW_SYNC_ARGS=(
+        sync
+        --project "$REPO_ROOT"
+        --locked
+        --inexact
+        --extra dataflow
+    )
+    if [ "$REBUILD_DATAFLOW" = "1" ]; then
+        DATAFLOW_SYNC_ARGS+=(--reinstall-package loom-dataflow)
+    fi
+    if [ "$SKIP_HELION" = "0" ]; then
+        DATAFLOW_SYNC_ARGS+=(--extra helion)
+    fi
+
     echo ""
-    echo "[SKIP] helion-mlir (--skip-helion)"
+    echo "--- Building and installing loom-dataflow ---"
+    uv "${DATAFLOW_SYNC_ARGS[@]}"
 fi
 
 # ---------------------------------------------------------------------------
-# Step 4: loom-mlar (Rust evaluator binary)
+# Stage 2 continued: loom-mlar (Rust evaluator binary)
 # ---------------------------------------------------------------------------
 if [ "$LOOM_HAS_CARGO" = "1" ] && [ "$SKIP_MLAR" = "0" ]; then
-    if [ -n "${LOOM_EVAL_CORE:-}" ] && [ -x "${LOOM_EVAL_CORE}" ]; then
+    if [ -n "${LOOM_EVAL_SYSTEM:-}" ] && [ -x "${LOOM_EVAL_SYSTEM}" ]; then
         echo ""
-        echo "[SKIP] loom-mlar build (using pre-built binary: $LOOM_EVAL_CORE)"
+        echo "[SKIP] loom-mlar build (using pre-built binary: $LOOM_EVAL_SYSTEM)"
     else
         echo ""
         echo "=== Building loom-mlar eval_system binary ==="
@@ -126,13 +147,6 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# Step 5: Root loom package
-# ---------------------------------------------------------------------------
-echo ""
-echo "=== Installing loom (editable) ==="
-"$PYTHON" -m pip install -e "$REPO_ROOT"
-
-# ---------------------------------------------------------------------------
 # Summary
 # ---------------------------------------------------------------------------
 echo ""
@@ -141,7 +155,7 @@ echo "  Loom monorepo install complete"
 echo "============================================"
 
 _check_import() {
-    if "$PYTHON" -c "import $1" 2>/dev/null; then
+    if uv run --project "$REPO_ROOT" --no-sync python -c "import $1" 2>/dev/null; then
         printf "  %-16s %s\n" "$1" "OK"
     else
         printf "  %-16s %s\n" "$1" "NOT INSTALLED"

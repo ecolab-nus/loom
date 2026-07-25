@@ -29,7 +29,7 @@ loom-monorepo/
 ├── install-dev.sh           # Developer install script for the core stack
 ├── test/                    # Generated/integration artifacts
 ├── tests/                   # Python regression tests
-└── third_party/             # The four subrepos listed above
+└── third_party/             # Loom subrepos plus the pinned llvm-project toolchain
 ```
 
 The root `loom` package connects the subrepos in process: it asks `helion-mlir` for stage-00 MLIR, calls `loom-dataflow` Python bindings for exploration and materialization, sends ETG variants through `loom-mlar`, and uses the active `loom.solver` CPMpy/CP-SAT optimizer to choose block-size assignments. The solver consumes resolved ETG constraints and timing expressions, searches finite symbol domains, and returns per-candidate block sizes for materialization.
@@ -69,36 +69,32 @@ Optional backend project for lowering bufferized Loom MLIR into TTKernel/tt-mlir
 
 ### Prerequisites
 
-- Python 3.10+
+- [uv 0.11+](https://docs.astral.sh/uv/getting-started/installation/)
 
 Optional, depending on which components you build:
-- CMake >= 3.20, Ninja, lld, a C++17 compiler, and an MLIR installation for `loom-dataflow`
+- CMake >= 3.20, Ninja, lld, and a C++17 compiler for bundled LLVM/MLIR and `loom-dataflow`
 - Rust toolchain for `loom-mlar`
 - tt-metal and tt-mlir for `loom2ttkernel`
 
 ### Installation
 
-Create a Python 3.10 environment and run the developer install script:
+Run the developer install script:
 
 ```bash
-conda create -n loom python=3.10 -y
-conda activate loom
-
 bash install-dev.sh
 ```
 
-If you have a custom MLIR installation, pass it explicitly:
+The script uses uv to install the pinned Python 3.10 interpreter when needed,
+create `.venv`, and synchronize all Python packages from `uv.lock`. Do not
+create or activate a separate Conda or virtualenv environment.
 
-```bash
-bash install-dev.sh --mlir-dir=/path/to/your/mlir/lib/cmake/mlir
-```
-
-or set `MLIR_DIR`:
-
-```bash
-export MLIR_DIR=/path/to/your/mlir/lib/cmake/mlir
-bash install-dev.sh
-```
+By default, the script initializes the `third_party/llvm-project` submodule at
+the pinned commit `6ad25c5912fcf13b44fcc03bd6a66dc33348cd68`
+(`LLVM 22.0.0git`) and incrementally builds LLVM/MLIR in
+`build/llvm-6ad25c59`. The generated MLIR CMake package is then used to build
+`loom-dataflow`. The machine does not need a system LLVM or MLIR installation.
+The LLVM source, build directory, and generated `MLIR_DIR` are derived from
+paths inside the repository; no LLVM or MLIR path needs to be supplied.
 
 ### Install Script Options
 
@@ -106,20 +102,56 @@ bash install-dev.sh
 bash install-dev.sh [OPTIONS]
 
 Options:
-  --mlir-dir=PATH     Path to MLIR cmake config directory
-                       (default: $MLIR_DIR or /opt/llvm-mlir/lib/cmake/mlir)
   --skip-mlar         Skip building the loom-mlar Rust evaluator
   --skip-dataflow     Skip building loom-dataflow (C++ MLIR passes)
   --skip-helion       Skip installing helion-mlir
+  --rebuild-dataflow  Force rebuilding loom-dataflow
   --help              Show help message
 
 Environment variables:
-  PYTHON              Python 3.10+ interpreter used for every pip/install check
-  MLIR_DIR            Path to MLIR cmake config directory
+  LOOM_LLVM_JOBS      Parallel LLVM build jobs (default: min(nproc, 32))
   LOOM_EVAL_SYSTEM    Path to a pre-built eval_system binary
 ```
 
-The script initializes submodules, checks dependencies, installs `loom-dataflow` and `helion-mlir` in editable mode, builds the MLAR evaluator when available, and installs the root `loom` package.
+The install has two stages:
+
+1. Initialize the reusable Python 3.10 environment from `uv.lock`, without
+   building `loom-dataflow`.
+2. Incrementally build the pinned LLVM/MLIR toolchain, install
+   `loom-dataflow`, and build the MLAR evaluator.
+
+If a native build fails, stage 1 remains installed and is reused on the next
+run. LLVM uses its existing Ninja build directory, and uv does not force a
+`loom-dataflow` reinstall on every run. To deliberately rebuild the extension
+after changing its C++ sources, run:
+
+```bash
+bash install-dev.sh --rebuild-dataflow
+```
+
+### Python Environment
+
+Python dependencies are declared in the root and workspace-member
+`pyproject.toml` files. Exact resolved versions are committed in `uv.lock`, and
+`.python-version` pins the environment to Python 3.10.
+
+To run only the first, Python-only stage without the native-system checks or
+builds:
+
+```bash
+uv sync --locked --inexact --extra dataflow --extra helion \
+  --no-install-package loom-dataflow
+```
+
+Run Python commands through uv so they always use the project environment:
+
+```bash
+uv run python --version
+uv run pytest
+```
+
+Use `uv add`, `uv remove`, and `uv lock` when changing dependencies. Commit
+`pyproject.toml` and `uv.lock` together.
 
 ## Usage
 
@@ -128,13 +160,13 @@ The script initializes submodules, checks dependencies, installs `loom-dataflow`
 Kernel scripts inherit a CLI from `LoomKernel`. The recommended path is a config file:
 
 ```bash
-python kernels/matmul.py --config kernels/config_files/matmul.json --njobs 16 --debug
+uv run python kernels/matmul.py --config kernels/config_files/matmul.json --njobs 16 --debug
 ```
 
 Or pass paths explicitly:
 
 ```bash
-python kernels/matmul.py \
+uv run python kernels/matmul.py \
   --output-path test/matmul_2Dmesh \
   --hw-spec third_party/loom-mlar/tests/2d_mesh/2d_mesh_torus.mlir \
   --njobs 16 \
@@ -219,6 +251,7 @@ After a successful run, the output directory contains:
 
 | Script | Description |
 |--------|-------------|
-| `install-dev.sh` | Initializes submodules, runs preflight checks, installs core Python/C++ subprojects, and builds the MLAR evaluator when possible. |
-| `scripts/preflight.sh` | Checks required Python, build, MLIR, and Rust dependencies. |
+| `install-dev.sh` | Runs the two-stage Python and native developer installation. |
+| `scripts/preflight.sh` | Checks uv, the pinned LLVM submodule, and required native build and Rust tools. |
+| `scripts/build-llvm.sh` | Incrementally builds the pinned LLVM/MLIR commit for `loom-dataflow`. |
 | `scripts/build-mlar.sh` | Builds the `loom-mlar` `eval_system` evaluator binary used by the root pipeline. |

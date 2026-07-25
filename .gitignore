@@ -5,6 +5,7 @@
 .codex
 
 # Python packaging artifacts
+.venv/
 *.egg-info/
 __pycache__/
 *.py[cod]

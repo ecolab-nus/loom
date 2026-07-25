@@ -1,7 +1,7 @@
 [submodule "third_party/loom-dataflow"]
 	path = third_party/loom-dataflow
 	url = ../loom-dataflow.git
-	branch = feature/symbolic
+	branch = main
 [submodule "third_party/helion-mlir"]
 	path = third_party/helion-mlir
 	url = ../helion-mlir.git
@@ -14,3 +14,7 @@
 	path = third_party/loom2ttkernel
 	url = ../loom2ttkernel.git
 	branch = main
+[submodule "third_party/llvm-project"]
+	path = third_party/llvm-project
+	url = https://github.com/llvm/llvm-project.git
+	shallow = true

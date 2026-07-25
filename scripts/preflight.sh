@@ -11,8 +11,7 @@
 #
 # Callers may set these variables before sourcing to influence behaviour:
 #   SKIP_DATAFLOW  - set to 1 to skip cmake/MLIR checks
-#   SKIP_RUST      - set to 1 to skip cargo/rustc checks
-#   MLIR_DIR       - path to MLIR cmake config directory
+#   SKIP_MLAR      - set to 1 to skip cargo/rustc checks
 
 # ---------------------------------------------------------------------------
 # Globals
@@ -39,7 +38,8 @@ check_submodules() {
     local repo_root="${REPO_ROOT:-.}"
     if [ -f "$repo_root/third_party/loom-dataflow/CMakeLists.txt" ] \
         && [ -f "$repo_root/third_party/helion-mlir/pyproject.toml" ] \
-        && [ -f "$repo_root/third_party/loom-mlar/Cargo.toml" ]; then
+        && [ -f "$repo_root/third_party/loom-mlar/Cargo.toml" ] \
+        && [ -f "$repo_root/third_party/llvm-project/llvm/CMakeLists.txt" ]; then
         _ok "Git submodules populated"
     else
         _fail "Git submodules not initialized"
@@ -48,34 +48,14 @@ check_submodules() {
     fi
 }
 
-check_python() {
-    local python="${PYTHON:-python3}"
-    if command -v "$python" &>/dev/null; then
+check_uv() {
+    if command -v uv &>/dev/null; then
         local ver
-        ver=$("$python" -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')
-        local major minor
-        major=$(echo "$ver" | cut -d. -f1)
-        minor=$(echo "$ver" | cut -d. -f2)
-        if [ "$major" -ge 3 ] && [ "$minor" -ge 10 ]; then
-            _ok "Python $ver"
-        else
-            _fail "Python >= 3.10 required (found $ver)"
-            (( _PREFLIGHT_ERRORS++ ))
-        fi
+        ver=$(uv --version)
+        _ok "$ver"
     else
-        _fail "Python interpreter not found: $python"
-        _hint "Install Python 3.10+ from https://www.python.org/downloads/"
-        (( _PREFLIGHT_ERRORS++ ))
-    fi
-}
-
-check_pip() {
-    local python="${PYTHON:-python3}"
-    if "$python" -m pip --version &>/dev/null; then
-        _ok "pip"
-    else
-        _fail "pip not found"
-        _hint "Install: python3 -m ensurepip --upgrade"
+        _fail "uv not found"
+        _hint "Install uv: https://docs.astral.sh/uv/getting-started/installation/"
         (( _PREFLIGHT_ERRORS++ ))
     fi
 }
@@ -87,17 +67,17 @@ check_cmake() {
         local major minor
         major=$(echo "$ver" | cut -d. -f1)
         minor=$(echo "$ver" | cut -d. -f2)
-        if [ "$major" -ge 3 ] && [ "$minor" -ge 20 ]; then
+        if [ "$major" -gt 3 ] || { [ "$major" -eq 3 ] && [ "$minor" -ge 20 ]; }; then
             _ok "cmake $ver"
         else
             _fail "cmake >= 3.20 required (found $ver)"
-            _hint "Install: apt install cmake  OR  pip install cmake"
+            _hint "Install: apt install cmake"
             LOOM_CAN_BUILD_DATAFLOW=0
             (( _PREFLIGHT_ERRORS++ ))
         fi
     else
         _fail "cmake not found"
-        _hint "Install: apt install cmake  OR  pip install cmake"
+        _hint "Install: apt install cmake"
         LOOM_CAN_BUILD_DATAFLOW=0
         (( _PREFLIGHT_ERRORS++ ))
     fi
@@ -108,7 +88,7 @@ check_ninja() {
         _ok "ninja"
     else
         _fail "ninja not found"
-        _hint "Install: apt install ninja-build  OR  pip install ninja"
+        _hint "Install: apt install ninja-build"
         LOOM_CAN_BUILD_DATAFLOW=0
         (( _PREFLIGHT_ERRORS++ ))
     fi
@@ -142,14 +122,18 @@ check_cxx_compiler() {
     fi
 }
 
-check_mlir_dir() {
-    local mlir_dir="${MLIR_DIR:-/opt/llvm-mlir/lib/cmake/mlir}"
-    if [ -f "$mlir_dir/MLIRConfig.cmake" ]; then
-        _ok "MLIR_DIR ($mlir_dir)"
+check_llvm_submodule() {
+    local expected_version="22.0.0git"
+    local expected_rev="6ad25c5912fcf13b44fcc03bd6a66dc33348cd68"
+    local expected_short_rev="${expected_rev:0:10}"
+    local llvm_source="${REPO_ROOT:-.}/third_party/llvm-project"
+    local actual_rev
+    actual_rev=$(git -C "$llvm_source" rev-parse HEAD 2>/dev/null || true)
+    if [ "$actual_rev" = "$expected_rev" ]; then
+        _ok "Bundled LLVM/MLIR $expected_version source ($expected_short_rev)"
     else
-        _fail "MLIRConfig.cmake not found in MLIR_DIR=$mlir_dir"
-        _hint "Set MLIR_DIR to your MLIR cmake config directory"
-        _hint "  e.g. export MLIR_DIR=/path/to/llvm-project/build/lib/cmake/mlir"
+        _fail "Bundled llvm-project is not at pinned commit $expected_rev"
+        _hint "Run: git submodule update --init --recursive"
         LOOM_CAN_BUILD_DATAFLOW=0
         (( _PREFLIGHT_ERRORS++ ))
     fi
@@ -179,25 +163,24 @@ run_preflight_checks() {
     LOOM_HAS_CARGO=1
 
     check_submodules
-    check_python
-    check_pip
+    check_uv
 
     if [ "${SKIP_DATAFLOW:-0}" != "1" ]; then
         check_cmake
         check_ninja
         check_lld
         check_cxx_compiler
-        check_mlir_dir
+        check_llvm_submodule
     else
         _warn "Skipping loom-dataflow checks (--skip-dataflow)"
         LOOM_CAN_BUILD_DATAFLOW=0
         (( _PREFLIGHT_WARNINGS++ ))
     fi
 
-    if [ "${SKIP_RUST:-0}" != "1" ]; then
+    if [ "${SKIP_MLAR:-0}" != "1" ]; then
         check_cargo
     else
-        _warn "Skipping Rust checks (--skip-rust)"
+        _warn "Skipping Rust checks (--skip-mlar)"
         LOOM_HAS_CARGO=0
         (( _PREFLIGHT_WARNINGS++ ))
     fi
