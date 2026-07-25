@@ -24,7 +24,7 @@
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")" && pwd)"
-LLVM_BUILD_DIR="$REPO_ROOT/build/llvm-6ad25c59"
+LLVM_BUILD_DIR="$REPO_ROOT/build/llvm-4efe170d"
 export MLIR_DIR="$LLVM_BUILD_DIR/lib/cmake/mlir"
 SKIP_MLAR=0
 SKIP_DATAFLOW=0

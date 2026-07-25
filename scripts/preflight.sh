@@ -124,7 +124,7 @@ check_cxx_compiler() {
 
 check_llvm_submodule() {
     local expected_version="22.0.0git"
-    local expected_rev="6ad25c5912fcf13b44fcc03bd6a66dc33348cd68"
+    local expected_rev="4efe170d858eb54432f520abb4e7f0086236748b"
     local expected_short_rev="${expected_rev:0:10}"
     local llvm_source="${REPO_ROOT:-.}/third_party/llvm-project"
     local actual_rev

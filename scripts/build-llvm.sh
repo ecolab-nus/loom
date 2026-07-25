@@ -3,10 +3,10 @@
 #
 # Source:
 #   third_party/llvm-project
-#   commit 6ad25c5912fcf13b44fcc03bd6a66dc33348cd68
+#   commit 4efe170d858eb54432f520abb4e7f0086236748b
 #
 # Output:
-#   build/llvm-6ad25c59
+#   build/llvm-4efe170d
 #
 # Environment:
 #   LOOM_LLVM_JOBS  Override parallel build jobs (default: min(nproc, 32))
@@ -15,8 +15,8 @@ set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 LLVM_SOURCE_DIR="$REPO_ROOT/third_party/llvm-project"
-LLVM_BUILD_DIR="$REPO_ROOT/build/llvm-6ad25c59"
-LLVM_EXPECTED_REV="6ad25c5912fcf13b44fcc03bd6a66dc33348cd68"
+LLVM_BUILD_DIR="$REPO_ROOT/build/llvm-4efe170d"
+LLVM_EXPECTED_REV="4efe170d858eb54432f520abb4e7f0086236748b"
 LLVM_EXPECTED_VERSION="22.0.0git"
 PYTHON_EXECUTABLE="$REPO_ROOT/.venv/bin/python"
 
@@ -53,7 +53,7 @@ else
 fi
 
 echo ""
-echo "=== Configuring bundled LLVM/MLIR at 6ad25c5912 ==="
+echo "=== Configuring bundled LLVM/MLIR at 4efe170d85 ==="
 echo "  Source: $LLVM_SOURCE_DIR"
 echo "  Commit: $LLVM_EXPECTED_REV"
 echo "  Build:  $LLVM_BUILD_DIR"
@@ -76,7 +76,7 @@ cmake \
     -DLLVM_USE_LINKER=lld
 
 echo ""
-echo "=== Building bundled LLVM/MLIR at 6ad25c5912 ==="
+echo "=== Building bundled LLVM/MLIR at 4efe170d85 ==="
 cmake --build "$LLVM_BUILD_DIR" \
     --target mlir-opt mlir-lsp-server \
     --parallel "$LLVM_JOBS"

@@ -89,9 +89,9 @@ create `.venv`, and synchronize all Python packages from `uv.lock`. Do not
 create or activate a separate Conda or virtualenv environment.
 
 By default, the script initializes the `third_party/llvm-project` submodule at
-the pinned commit `6ad25c5912fcf13b44fcc03bd6a66dc33348cd68`
+the pinned commit `4efe170d858eb54432f520abb4e7f0086236748b`
 (`LLVM 22.0.0git`) and incrementally builds LLVM/MLIR in
-`build/llvm-6ad25c59`. The generated MLIR CMake package is then used to build
+`build/llvm-4efe170d`. The generated MLIR CMake package is then used to build
 `loom-dataflow`. The machine does not need a system LLVM or MLIR installation.
 The LLVM source, build directory, and generated `MLIR_DIR` are derived from
 paths inside the repository; no LLVM or MLIR path needs to be supplied.
