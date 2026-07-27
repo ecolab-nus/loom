@@ -14,3 +14,7 @@
 	path = third_party/loom2ttkernel
 	url = ../loom2ttkernel.git
 	branch = main
+[submodule "third_party/adl-dialect"]
+	path = third_party/adl-dialect
+	url = https://github.com/ecolab-nus/adl-dialect.git
+	branch = main
