@@ -19,6 +19,7 @@ The root repository is the orchestration and active solver layer:
 
 ```text
 loom-monorepo/
+├── .devcontainer/           # Standard development-container configuration
 ├── loom/                    # Python orchestration package
 │   ├── pipeline.py          # End-to-end pipeline stages and output layout
 │   ├── kernel_base.py       # LoomKernel base class and inherited kernel CLI

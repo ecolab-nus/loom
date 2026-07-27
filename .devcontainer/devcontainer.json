@@ -1,0 +1,9 @@
+{
+  "$schema": "https://raw.githubusercontent.com/devcontainers/spec/main/schemas/devContainer.base.schema.json",
+  "name": "Loom",
+  "image": "ftod/loom_dev:latest",
+  "remoteUser": "root",
+  "init": true,
+  "overrideCommand": false,
+  "postCreateCommand": "bash install-docker.sh"
+}

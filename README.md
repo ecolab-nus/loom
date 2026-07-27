@@ -17,16 +17,28 @@ and repository layout.
 
 ## Quick Start
 
-Install Docker, an OpenSSH client, and
-[VS Code Remote - SSH](https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-ssh).
-Create an SSH key if you do not already have one:
+Clone Loom with your preferred Git transport and initialize its submodules:
 
 ```bash
-test -f ~/.ssh/id_ed25519.pub || ssh-keygen -t ed25519
+git submodule update --init --recursive
 ```
 
-Pull the development image and start a persistent SSH container. Loom's source
-and build environment live in the `loom-workspace` Docker volume:
+Install
+[VS Code Dev Containers](https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-containers),
+open the cloned repository in VS Code, and run **Dev Containers: Reopen in
+Container** from the Command Palette.
+
+If Docker runs remotely, first connect to that host with
+[Remote - SSH](https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-ssh),
+open the repository directory on that host, and run **Reopen in Container**
+from the remote window.
+
+VS Code pulls the development image, creates the container, mounts the
+checkout, and runs `install-docker.sh` automatically.
+
+### Without VS Code
+
+On the Docker host:
 
 ```bash
 docker pull ftod/loom_dev:latest
@@ -35,25 +47,25 @@ docker volume create loom-workspace
 docker run -d \
   --name loom-dev \
   --hostname loom-dev \
+  --init \
   --restart unless-stopped \
-  --publish 127.0.0.1:2222:22 \
   --mount type=volume,src=loom-workspace,dst=/workspace \
-  --mount type=bind,src="$HOME/.ssh/id_ed25519.pub",dst=/run/loom/authorized_key,readonly \
   ftod/loom_dev:latest
 ```
 
-Add the following host to `~/.ssh/config`:
+Enter a local container with:
 
-```ssh-config
-Host loom-dev
-  HostName 127.0.0.1
-  Port 2222
-  User root
-  IdentityFile ~/.ssh/id_ed25519
+```bash
+docker exec -it loom-dev bash
 ```
 
-In VS Code, run **Remote-SSH: Connect to Host...**, choose `loom-dev`, and
-open a terminal to install the workspace:
+For Docker on a remote host:
+
+```bash
+ssh -t docker-host 'docker exec -it loom-dev bash'
+```
+
+Inside the container, install the workspace:
 
 ```bash
 cd /workspace
@@ -62,9 +74,10 @@ cd loom
 bash install-docker.sh
 ```
 
-Then open `/workspace/loom` in VS Code. You can also connect with
-`ssh loom-dev`. See the [Docker development guide](docs/docker.md) for
-container lifecycle, build options, image details, and hardware access.
+Then continue in the container shell. The standard VS Code workflow opens its
+volume-backed workspace automatically, normally at `/workspaces/loom`. See
+the [Docker development guide](docs/docker.md) for the Dev Container CLI,
+local and remote access, lifecycle, build options, and hardware access.
 
 ## Run an Example
 

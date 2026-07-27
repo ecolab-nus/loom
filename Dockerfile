@@ -103,16 +103,6 @@ RUN curl --proto '=https' --tlsv1.2 -fsSL --retry 5 https://sh.rustup.rs \
 # Copy the pinned uv binaries from Astral's official distroless image.
 COPY --from=uv-bin /uv /uvx /usr/local/bin/
 
-# SSH is the default development entry point. Host keys are generated when a
-# container is first started, and root login is key-only.
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends openssh-server \
-    && rm -rf /var/lib/apt/lists/* \
-    && rm -f /etc/ssh/ssh_host_*
-
-COPY docker/sshd_config /etc/ssh/sshd_config
-COPY --chmod=0755 docker/container-entrypoint.sh /usr/local/bin/loom-container-entrypoint
-
 # Persist the useful parts of `source env/activate` for normal docker run calls.
 ENV PATH=/opt/tt-mlir/build/bin:/opt/ttmlir-toolchain/bin:/opt/ttmlir-toolchain/venv/bin:/root/.tenstorrent-venv/bin:/opt/cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
     PYTHONPATH=/opt/tt-mlir/build/python_packages:/opt/tt-mlir/build/runtime/python:/opt/ttmlir-toolchain/python_packages/mlir_core \
@@ -128,6 +118,4 @@ RUN test -f "${MLIR_DIR}/MLIRConfig.cmake" \
     && uv --version
 
 WORKDIR /workspace
-EXPOSE 22
-ENTRYPOINT ["/usr/local/bin/loom-container-entrypoint"]
-CMD ["sshd"]
+CMD ["sleep", "infinity"]

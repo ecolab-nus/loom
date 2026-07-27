@@ -11,8 +11,8 @@ Use these guides for detailed information:
 
 - [Architecture](architecture.md): repository layout, subprojects, and the
   compilation pipeline.
-- [Docker development](docker.md): SSH and VS Code setup, image details,
-  workspace builds, lifecycle, validation, and Tenstorrent hardware access.
+- [Docker development](docker.md): VS Code and command-line access, image
+  details, workspace builds, lifecycle, validation, and hardware access.
 - [Usage](usage.md): running kernels, configuration files, writing new
   kernels, and generated outputs.
 

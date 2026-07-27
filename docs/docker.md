@@ -1,124 +1,175 @@
 # Docker Development
 
-The supported development environment is the prebuilt
-[`ftod/loom_dev:latest`](https://hub.docker.com/r/ftod/loom_dev) image. Run it
-as a persistent SSH server and keep the checkout in a Docker named volume.
-This gives command-line tools and VS Code direct access to the same container
-without bind-mounting the repository from the host.
+Loom follows the
+[Development Container Specification](https://containers.dev/) through
+`.devcontainer/devcontainer.json`. The configuration uses the prebuilt
+[`ftod/loom_dev:latest`](https://hub.docker.com/r/ftod/loom_dev) image and
+runs `install-docker.sh` when the development container is first created.
+
+The recommended VS Code workflow starts from a checkout created with the
+developer's preferred Git transport. VS Code mounts that checkout into the
+development container.
 
 ## 1. Prerequisites
 
-Install:
+This guide uses two terms:
 
-- Docker Engine;
-- an OpenSSH client;
-- [Visual Studio Code](https://code.visualstudio.com/);
-- the
-  [Remote - SSH extension](https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-ssh).
+- **workstation**: the developer's local machine;
+- **Docker host**: the machine running Docker Engine and the Loom container.
 
-Verify Docker:
+They may be the same machine.
+
+The Docker host requires Docker Engine:
 
 ```bash
 docker version
+docker ps
 ```
 
-The container accepts SSH keys only. Create an Ed25519 key if the default key
-does not exist:
+For remote development, verify SSH access from the workstation:
 
 ```bash
-test -f ~/.ssh/id_ed25519.pub || ssh-keygen -t ed25519
+ssh docker-host
 ```
 
-## 2. Download the Image
+Membership in the host's `docker` group typically grants root-equivalent
+control of that host. Only grant Docker access to trusted developers.
+
+VS Code users need:
+
+- [Visual Studio Code](https://code.visualstudio.com/);
+- [Dev Containers](https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-containers);
+- [Remote - SSH](https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-ssh)
+  when the Docker host is remote.
+
+## 2. Dev Container Configuration
+
+The repository configuration is:
+
+```json
+{
+  "$schema": "https://raw.githubusercontent.com/devcontainers/spec/main/schemas/devContainer.base.schema.json",
+  "name": "Loom",
+  "image": "ftod/loom_dev:latest",
+  "remoteUser": "root",
+  "init": true,
+  "overrideCommand": false,
+  "postCreateCommand": "bash install-docker.sh"
+}
+```
+
+It has the following behavior:
+
+- pulls the published Loom development image;
+- runs the container as `root`, matching the image toolchain;
+- enables a small init process;
+- keeps the image's `sleep infinity` command;
+- creates Loom's `.venv` and builds all workspace components after cloning.
+
+The image supplies `uv`, LLVM/MLIR, tt-mlir, TT-Metal, and Rust.
+Project-specific Python packages are installed by the lifecycle command, not
+baked into the image.
+
+## 3. VS Code: Local Docker
+
+Clone the repository by any preferred method, including SSH. Ensure its
+submodules are initialized:
 
 ```bash
-docker pull ftod/loom_dev:latest
-docker image inspect ftod/loom_dev:latest >/dev/null
+git submodule update --init --recursive
 ```
 
-The published image currently targets `linux/amd64`.
+Then:
 
-To verify its main tools without starting the SSH server:
+1. Open the repository directory in VS Code.
+2. Open the Command Palette.
+3. Run **Dev Containers: Reopen in Container**.
+4. Wait for `postCreateCommand` to finish.
 
-```bash
-docker run --rm ftod/loom_dev:latest bash -lc '
-  set -e
-  test -f "$MLIR_DIR/MLIRConfig.cmake"
-  test -f "$LLVM_DIR/LLVMConfig.cmake"
-  test -f "$TTMLIR_BUILD_DIR/lib/libMLIRTTKernelDialect.a"
-  ttmlir-opt --version
-  mlir-opt --version
-  rustc --version
-  cargo --version
-  uv --version
-'
-```
+VS Code pulls the development image if necessary, creates the container,
+bind-mounts the checkout, installs Loom, and opens the workspace inside the
+container. Later, opening the same directory lets VS Code reopen the existing
+development container.
 
-## 3. Start the Persistent Container
+## 4. VS Code: Remote Docker Host
 
-Create a named volume for the source tree, Python environment, caches, and
-build products:
-
-```bash
-docker volume create loom-workspace
-```
-
-Start the container. Publishing SSH only on `127.0.0.1` prevents remote hosts
-from connecting directly:
-
-```bash
-docker run -d \
-  --name loom-dev \
-  --hostname loom-dev \
-  --restart unless-stopped \
-  --publish 127.0.0.1:2222:22 \
-  --mount type=volume,src=loom-workspace,dst=/workspace \
-  --mount type=bind,src="$HOME/.ssh/id_ed25519.pub",dst=/run/loom/authorized_key,readonly \
-  ftod/loom_dev:latest
-```
-
-Check that the SSH server is ready:
-
-```bash
-docker logs loom-dev
-docker ps --filter name=loom-dev
-```
-
-If you use a different key, change both the public-key path in `docker run`
-and the private-key path in the SSH configuration below.
-
-## 4. Configure SSH
-
-Add this entry to `~/.ssh/config` on the host:
+Configure the Docker host in the workstation's `~/.ssh/config`:
 
 ```ssh-config
-Host loom-dev
-  HostName 127.0.0.1
-  Port 2222
-  User root
+Host docker-host
+  HostName YOUR_DOCKER_HOST
+  User YOUR_REMOTE_USER
   IdentityFile ~/.ssh/id_ed25519
 ```
 
-Test the connection:
+Then:
+
+1. Run **Remote-SSH: Connect to Host...** and select `docker-host`.
+2. Ensure Dev Containers is installed in the remote SSH window.
+3. Clone Loom on the Docker host using the Git transport and credentials
+   available there, unless it is already cloned.
+4. Open that repository directory with **File: Open Folder...**.
+5. Run **Dev Containers: Reopen in Container**.
+6. Wait for the automatic workspace installation.
+
+The Docker client does not need to be installed on the workstation. The
+repository, container, and all build artifacts live on the remote Docker
+host. Git credentials are used only on that host; the workflow does not
+require an HTTPS repository URL.
+
+## 5. Dev Container CLI
+
+The reference `devcontainer` CLI can create the same declared environment
+without VS Code. Install the CLI, then run it from an existing Loom checkout:
 
 ```bash
-ssh loom-dev
+npm install --global @devcontainers/cli
+
+cd /path/to/loom
+git submodule update --init --recursive
+devcontainer up --workspace-folder .
+devcontainer exec --workspace-folder . bash
 ```
 
-The image uses public-key authentication and disables SSH passwords. The
-mounted public key is copied into the container with restrictive permissions
-when it starts.
+The CLI executes `postCreateCommand` during `up`. Its normal
+`--workspace-folder` workflow bind-mounts the checkout from the Docker host.
 
-## 5. Develop with VS Code
+## 6. Raw Docker CLI
 
-VS Code Remote SSH is the recommended interface:
+Non-VS Code users can create the persistent environment directly on the
+Docker host:
 
-1. Open the Command Palette.
-2. Run **Remote-SSH: Connect to Host...**.
-3. Select `loom-dev`.
-4. After connecting, choose **Open Folder...** and open `/workspace/loom`.
+```bash
+docker pull ftod/loom_dev:latest
+docker volume create loom-workspace
 
-On the first connection, use the VS Code terminal to clone and install Loom:
+docker run -d \
+  --name loom-dev \
+  --hostname loom-dev \
+  --init \
+  --restart unless-stopped \
+  --mount type=volume,src=loom-workspace,dst=/workspace \
+  ftod/loom_dev:latest
+```
+
+For a local Docker host:
+
+```bash
+docker exec -it loom-dev bash
+```
+
+For a remote Docker host, either log in first or combine both operations:
+
+```bash
+ssh docker-host
+docker exec -it loom-dev bash
+```
+
+```bash
+ssh -t docker-host 'docker exec -it loom-dev bash'
+```
+
+Inside a newly created raw Docker container:
 
 ```bash
 cd /workspace
@@ -127,25 +178,26 @@ cd loom
 bash install-docker.sh
 ```
 
-VS Code installs its remote server and workspace extensions inside the
-container. The source, `.venv`, uv-managed Python, uv cache, and compiled
-artifacts remain in `loom-workspace`, so they survive container restarts and
-container replacement as long as the same volume is mounted at `/workspace`.
+Terminal editors, shells, and tools such as tmux can all run in this container
+shell. No VS Code installation is required.
 
-## 6. Build the Workspace
+For a non-interactive remote command:
 
-Run the installer from `/workspace/loom` in an SSH or VS Code terminal:
+```bash
+ssh docker-host \
+  'docker exec loom-dev bash -lc "cd /workspace/loom && uv run python -c '\''import loom'\''"'
+```
+
+## 7. Installation Options
+
+The automatic lifecycle command and raw Docker workflow both invoke:
 
 ```bash
 bash install-docker.sh
 ```
 
-The image supplies `uv`, while `install-docker.sh` creates Loom's project
-Python environment under `.venv` and builds `loom-dataflow`, `loom-mlar`, and
-`loom2ttkernel`.
-
-Incremental reruns reuse the existing Python, Cargo, and CMake artifacts.
-Available options are:
+Incremental reruns reuse existing Python, Cargo, and CMake artifacts.
+Available options for manual runs are:
 
 ```text
 bash install-docker.sh [OPTIONS]
@@ -173,9 +225,9 @@ rm -rf \
   third_party/loom-mlar/target
 ```
 
-## 7. Smoke Tests
+## 8. Smoke Tests
 
-Run inside the container:
+Run inside the Loom workspace:
 
 ```bash
 uv run python -c 'import loom, loom_pipeline, helion_mlir'
@@ -186,7 +238,7 @@ test -x third_party/loom2ttkernel/build/bin/tileloom_to_ttkernel_opt
 uv run pytest
 ```
 
-Run an example:
+Run the example used to validate the published environment:
 
 ```bash
 uv run python kernels/matmul.py \
@@ -197,77 +249,65 @@ uv run python kernels/matmul.py \
 
 See the [usage guide](usage.md) for configuration and output details.
 
-## 8. Container Lifecycle
+## 9. Raw Container Lifecycle
 
-Stop and resume the environment without losing work:
+Dev Container-aware tools manage their own containers. For the named
+`loom-dev` container created by the raw Docker workflow:
 
 ```bash
 docker stop loom-dev
 docker start loom-dev
-ssh loom-dev
+docker exec -it loom-dev bash
 ```
 
-Inspect it:
-
-```bash
-docker logs loom-dev
-docker ps --all --filter name=loom-dev
-```
-
-Deleting the container does not delete the named volume:
+Deleting the container does not delete its named volume:
 
 ```bash
 docker rm --force loom-dev
 ```
 
-You can then recreate the container with the command in section 3 and the
-same `loom-workspace` volume.
+Recreate it with the command in section 6 and the same `loom-workspace`
+volume.
 
-Do not remove `loom-workspace` unless you intend to delete the checkout,
-Python environment, caches, and all build output stored in it:
+Do not remove the volume unless you intend to delete the checkout, Python
+environment, caches, and all build output:
 
 ```bash
 docker volume rm loom-workspace
 ```
 
-If recreating the container changes its SSH host key, clear the old local
-entry and reconnect:
-
-```bash
-ssh-keygen -R '[127.0.0.1]:2222'
-```
-
-## 9. Tenstorrent Hardware Access
+## 10. Tenstorrent Hardware Access
 
 LLVM/MLIR compilation does not require a Tenstorrent device. For hardware
-access, configure the kernel driver and HugePages on the host, then add the
-device and HugePages mounts when creating the persistent container:
+access, configure the kernel driver and HugePages on the Docker host.
+
+The raw Docker command with hardware access is:
 
 ```bash
 docker run -d \
   --name loom-dev \
   --hostname loom-dev \
+  --init \
   --restart unless-stopped \
-  --publish 127.0.0.1:2222:22 \
   --device /dev/tenstorrent \
   --mount type=bind,src=/dev/hugepages-1G,dst=/dev/hugepages-1G \
   --mount type=volume,src=loom-workspace,dst=/workspace \
-  --mount type=bind,src="$HOME/.ssh/id_ed25519.pub",dst=/run/loom/authorized_key,readonly \
   ftod/loom_dev:latest
 ```
 
 Pass the complete `/dev/tenstorrent` device set rather than one numbered
 entry.
 
-## 10. Image Details and Local Rebuilds
+For Dev Container tools, add the equivalent device and HugePages arguments to
+a local override of `devcontainer.json` when hardware access is needed.
 
-The image contains the pinned LLVM/MLIR, tt-mlir, TT-Metal, and Rust
-toolchains required by Loom. Their paths and revisions are defined in the
+## 11. Image Details and Local Rebuilds
+
+The image's toolchain paths and pinned source revisions are defined in the
 repository
 [Dockerfile](https://github.com/ecolab-nus/loom/blob/main/Dockerfile).
-`MLIR_DIR`, `LLVM_DIR`, and related toolchain variables are available in both
-Docker commands and SSH sessions. Loom's project-specific Python environment
-is not preinstalled; only `uv` is provided for creating it.
+`MLIR_DIR`, `LLVM_DIR`, and related variables are available in Dev Container
+and `docker exec` sessions.
 
 Buildx is required only when rebuilding the image:
 
@@ -278,7 +318,8 @@ docker buildx build \
   .
 ```
 
-Use `loom_dev:local` in the container commands while testing a local build.
+Use `loom_dev:local` in a temporary local copy of `devcontainer.json` while
+testing a locally rebuilt image.
 
 For an offline machine, create and transfer an archive:
 
