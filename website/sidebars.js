@@ -3,7 +3,6 @@ const sidebars = {
     'introduction',
     'architecture',
     'docker',
-    'development',
     'usage',
   ],
 };

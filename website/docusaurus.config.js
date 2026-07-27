@@ -50,7 +50,6 @@ const config = {
           items: [
             {label: 'Architecture', to: '/architecture'},
             {label: 'Docker', to: '/docker'},
-            {label: 'Native development', to: '/development'},
             {label: 'Usage', to: '/usage'},
           ],
         },

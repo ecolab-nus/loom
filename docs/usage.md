@@ -1,7 +1,6 @@
 # Usage
 
-Complete either the [Docker](docker.md) or
-[native](development.md) development setup before running Loom.
+Complete the [Docker development setup](docker.md) before running Loom.
 
 ## Running a Kernel
 
@@ -105,4 +104,3 @@ After a successful run, the output directory contains:
     ├── p02_resolved_etg.json
     └── solver.log                      (--debug only)
 ```
-

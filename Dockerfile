@@ -1,6 +1,10 @@
 # syntax=docker/dockerfile:1.7
 
 ARG BASE_IMAGE=ghcr.io/tenstorrent/tt-mlir/tt-mlir-ci-ubuntu-24-04:latest
+ARG UV_VERSION=0.11.32
+
+FROM ghcr.io/astral-sh/uv:${UV_VERSION} AS uv-bin
+
 FROM ${BASE_IMAGE} AS ttmlir-builder
 
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
@@ -96,9 +100,21 @@ RUN curl --proto '=https' --tlsv1.2 -fsSL --retry 5 https://sh.rustup.rs \
     && "${CARGO_HOME}/bin/rustc" --version \
     && "${CARGO_HOME}/bin/cargo" --version
 
+# Copy the pinned uv binaries from Astral's official distroless image.
+COPY --from=uv-bin /uv /uvx /usr/local/bin/
+
+# SSH is the default development entry point. Host keys are generated when a
+# container is first started, and root login is key-only.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends openssh-server \
+    && rm -rf /var/lib/apt/lists/* \
+    && rm -f /etc/ssh/ssh_host_*
+
+COPY docker/sshd_config /etc/ssh/sshd_config
+COPY --chmod=0755 docker/container-entrypoint.sh /usr/local/bin/loom-container-entrypoint
+
 # Persist the useful parts of `source env/activate` for normal docker run calls.
-ENV VIRTUAL_ENV=/opt/ttmlir-toolchain/venv \
-    PATH=/opt/tt-mlir/build/bin:/opt/ttmlir-toolchain/bin:/opt/ttmlir-toolchain/venv/bin:/root/.tenstorrent-venv/bin:/opt/cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
+ENV PATH=/opt/tt-mlir/build/bin:/opt/ttmlir-toolchain/bin:/opt/ttmlir-toolchain/venv/bin:/root/.tenstorrent-venv/bin:/opt/cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
     PYTHONPATH=/opt/tt-mlir/build/python_packages:/opt/tt-mlir/build/runtime/python:/opt/ttmlir-toolchain/python_packages/mlir_core \
     LD_LIBRARY_PATH=/opt/tt-mlir/build/lib:/opt/ttmlir-toolchain/lib:/opt/tt-mlir/third_party/tt-metal/src/tt-metal/build/lib
 
@@ -108,7 +124,10 @@ RUN test -f "${MLIR_DIR}/MLIRConfig.cmake" \
     && ttmlir-opt --version \
     && mlir-opt --version \
     && rustc --version \
-    && cargo --version
+    && cargo --version \
+    && uv --version
 
 WORKDIR /workspace
-CMD ["/bin/bash"]
+EXPOSE 22
+ENTRYPOINT ["/usr/local/bin/loom-container-entrypoint"]
+CMD ["sshd"]

@@ -11,10 +11,8 @@ Use these guides for detailed information:
 
 - [Architecture](architecture.md): repository layout, subprojects, and the
   compilation pipeline.
-- [Docker development](docker.md): image contents, image construction,
-  workspace builds, validation, and Tenstorrent hardware access.
-- [Native development](development.md): host prerequisites, installation
-  options, Python environment management, and build scripts.
+- [Docker development](docker.md): SSH and VS Code setup, image details,
+  workspace builds, lifecycle, validation, and Tenstorrent hardware access.
 - [Usage](usage.md): running kernels, configuration files, writing new
   kernels, and generated outputs.
 

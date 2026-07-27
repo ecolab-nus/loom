@@ -6,6 +6,8 @@
 
 # Python packaging artifacts
 .venv/
+.uv-cache/
+.uv-python/
 *.egg-info/
 __pycache__/
 *.py[cod]

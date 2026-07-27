@@ -17,40 +17,54 @@ and repository layout.
 
 ## Quick Start
 
-Clone the repository and its submodules:
+Install Docker, an OpenSSH client, and
+[VS Code Remote - SSH](https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-ssh).
+Create an SSH key if you do not already have one:
 
 ```bash
-git clone --recurse-submodules https://github.com/ecolab-nus/loom.git
-cd loom
+test -f ~/.ssh/id_ed25519.pub || ssh-keygen -t ed25519
 ```
 
-### Docker
-
-Pull the development image and mount the repository:
+Pull the development image and start a persistent SSH container. Loom's source
+and build environment live in the `loom-workspace` Docker volume:
 
 ```bash
 docker pull ftod/loom_dev:latest
+docker volume create loom-workspace
 
-docker run -it \
+docker run -d \
   --name loom-dev \
-  --mount type=bind,src="$(pwd)",dst=/workspace \
-  --workdir /workspace \
+  --hostname loom-dev \
+  --restart unless-stopped \
+  --publish 127.0.0.1:2222:22 \
+  --mount type=volume,src=loom-workspace,dst=/workspace \
+  --mount type=bind,src="$HOME/.ssh/id_ed25519.pub",dst=/run/loom/authorized_key,readonly \
   ftod/loom_dev:latest
 ```
 
-Continue with the [Docker workspace build](docs/docker.md#5-build-the-workspace).
+Add the following host to `~/.ssh/config`:
 
-### Native
-
-Install [uv](https://docs.astral.sh/uv/getting-started/installation/), then
-run:
-
-```bash
-bash install-dev.sh
+```ssh-config
+Host loom-dev
+  HostName 127.0.0.1
+  Port 2222
+  User root
+  IdentityFile ~/.ssh/id_ed25519
 ```
 
-See the [native development guide](docs/development.md) for prerequisites and
-installation options.
+In VS Code, run **Remote-SSH: Connect to Host...**, choose `loom-dev`, and
+open a terminal to install the workspace:
+
+```bash
+cd /workspace
+git clone --recurse-submodules https://github.com/ecolab-nus/loom.git
+cd loom
+bash install-docker.sh
+```
+
+Then open `/workspace/loom` in VS Code. You can also connect with
+`ssh loom-dev`. See the [Docker development guide](docs/docker.md) for
+container lifecycle, build options, image details, and hardware access.
 
 ## Run an Example
 
@@ -80,5 +94,4 @@ Then open [http://localhost:3000](http://localhost:3000). Use
 - [Documentation index](docs/README.md)
 - [Architecture and compilation pipeline](docs/architecture.md)
 - [Docker development](docs/docker.md)
-- [Native development](docs/development.md)
 - [Usage](docs/usage.md)

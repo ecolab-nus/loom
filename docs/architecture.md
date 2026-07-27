@@ -26,7 +26,7 @@ loom-monorepo/
 │   └── loom_utils/          # ETG, MLAR, modeling, and timing helpers
 ├── kernels/                 # Example kernel entrypoints and configurations
 ├── scripts/                 # Installation, preflight, and build helpers
-├── install-dev.sh           # Native developer installation
+├── install-docker.sh        # Docker workspace installation
 ├── test/                    # Generated and integration artifacts
 ├── tests/                   # Python regression tests
 └── third_party/             # Loom subprojects and native dependencies
@@ -78,6 +78,5 @@ supplied.
 ### `loom2ttkernel`
 
 This optional backend lowers bufferized Loom MLIR into TTKernel/tt-mlir flows.
-It requires the external Tenstorrent dependencies supplied by the Docker
-development environment and is not built by the native `install-dev.sh`.
-
+Its external Tenstorrent dependencies are supplied by the Docker development
+environment, and it is built by `install-docker.sh`.
