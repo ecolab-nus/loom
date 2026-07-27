@@ -1,0 +1,17 @@
+# Only public keys copied from the Docker host are accepted.
+AllowUsers root
+PermitRootLogin prohibit-password
+PubkeyAuthentication yes
+AuthenticationMethods publickey
+PasswordAuthentication no
+PermitEmptyPasswords no
+KbdInteractiveAuthentication no
+UsePAM no
+AuthorizedKeysFile .ssh/authorized_keys
+
+# This lets developers use their workstation's agent for SSH Git operations
+# without copying private keys into the container.
+AllowAgentForwarding yes
+
+PrintMotd no
+PidFile /run/sshd.pid

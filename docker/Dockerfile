@@ -117,5 +117,27 @@ RUN test -f "${MLIR_DIR}/MLIRConfig.cmake" \
     && cargo --version \
     && uv --version
 
+# Terminal-only developers connect through SSH using a copy of the Docker
+# host account's authorized_keys. Password authentication remains disabled.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends openssh-server \
+    && passwd -d root \
+    && mkdir -p /run/sshd /run/loom \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY docker/sshd_config /etc/ssh/sshd_config.d/loom.conf
+COPY docker/container-entrypoint.sh /usr/local/bin/loom-container-entrypoint
+COPY docker/ssh-shell.sh /usr/local/bin/loom-ssh-shell
+
+RUN chmod +x \
+      /usr/local/bin/loom-container-entrypoint \
+      /usr/local/bin/loom-ssh-shell \
+    && usermod --shell /usr/local/bin/loom-ssh-shell root \
+    && ssh-keygen -A \
+    && /usr/sbin/sshd -t \
+    && rm -f /etc/ssh/ssh_host_*_key /etc/ssh/ssh_host_*_key.pub
+
 WORKDIR /workspace
+EXPOSE 22
+ENTRYPOINT ["/usr/local/bin/loom-container-entrypoint"]
 CMD ["sleep", "infinity"]

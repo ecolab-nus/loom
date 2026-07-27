@@ -38,46 +38,46 @@ checkout, and runs `install-docker.sh` automatically.
 
 ### Without VS Code
 
-On the Docker host:
+On the Docker host, run the provided launcher from a Loom checkout:
 
 ```bash
-docker pull ftod/loom_dev:latest
-docker volume create loom-workspace
-
-docker run -d \
-  --name loom-dev \
-  --hostname loom-dev \
-  --init \
-  --restart unless-stopped \
-  --mount type=volume,src=loom-workspace,dst=/workspace \
-  ftod/loom_dev:latest
+./docker/start-container.sh
 ```
 
-Enter a local container with:
+It copies the Docker host account's `~/.ssh/authorized_keys` into the
+container. Connect from the Docker host:
 
 ```bash
-docker exec -it loom-dev bash
+ssh -A -p 2222 root@localhost
 ```
 
-For Docker on a remote host:
+If Docker runs remotely, either connect in two steps:
 
 ```bash
-ssh -t docker-host 'docker exec -it loom-dev bash'
+ssh -A docker-host
+ssh -A -p 2222 root@localhost
 ```
 
-Inside the container, install the workspace:
+or directly through the Docker host:
+
+```bash
+ssh -A -J docker-host \
+  -o HostKeyAlias=loom-dev-on-docker-host \
+  -p 2222 root@localhost
+```
+
+Inside the container, clone with your preferred Git URL and install:
 
 ```bash
 cd /workspace
-git clone --recurse-submodules https://github.com/ecolab-nus/loom.git
+git clone --recurse-submodules YOUR_GIT_URL loom
 cd loom
 bash install-docker.sh
 ```
 
-Then continue in the container shell. The standard VS Code workflow opens its
-volume-backed workspace automatically, normally at `/workspaces/loom`. See
-the [Docker development guide](docs/docker.md) for the Dev Container CLI,
-local and remote access, lifecycle, build options, and hardware access.
+`-A` forwards the workstation's SSH agent, allowing SSH Git access without
+copying a private key into the container. See the
+[Docker development guide](docs/docker.md) for details and lifecycle commands.
 
 ## Run an Example
 

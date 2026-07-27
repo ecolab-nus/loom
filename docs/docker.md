@@ -136,56 +136,72 @@ The CLI executes `postCreateCommand` during `up`. Its normal
 
 ## 6. Raw Docker CLI
 
-Non-VS Code users can create the persistent environment directly on the
-Docker host:
+Non-VS Code users can work over a normal SSH connection. From a Loom checkout
+on the Docker host, run:
 
 ```bash
-docker pull ftod/loom_dev:latest
-docker volume create loom-workspace
-
-docker run -d \
-  --name loom-dev \
-  --hostname loom-dev \
-  --init \
-  --restart unless-stopped \
-  --mount type=volume,src=loom-workspace,dst=/workspace \
-  ftod/loom_dev:latest
+./docker/start-container.sh
 ```
 
-For a local Docker host:
+The launcher:
+
+- pulls `ftod/loom_dev:latest`;
+- creates the persistent `loom-workspace` Docker volume;
+- creates `loom-dev` with container port 22 published only at
+  `127.0.0.1:2222` on the Docker host;
+- copies the current Docker host account's `~/.ssh/authorized_keys` into the
+  container;
+- starts the container.
+
+Only public authorization data is copied. Private SSH keys are never copied.
+The image disables password login and accepts only the copied public keys.
+
+Connect from the Docker host:
 
 ```bash
-docker exec -it loom-dev bash
+ssh -A -p 2222 root@localhost
 ```
 
-For a remote Docker host, either log in first or combine both operations:
+When Docker is remote, connect to the host and then to the container:
 
 ```bash
-ssh docker-host
-docker exec -it loom-dev bash
+ssh -A docker-host
+ssh -A -p 2222 root@localhost
 ```
+
+The same connection can be made directly from the workstation:
 
 ```bash
-ssh -t docker-host 'docker exec -it loom-dev bash'
+ssh -A -J docker-host \
+  -o HostKeyAlias=loom-dev-on-docker-host \
+  -p 2222 root@localhost
 ```
 
-Inside a newly created raw Docker container:
+The copied file represents the account that ran the launcher. If developers
+use separate Unix accounts on the Docker host, each container inherits only
+the keys authorized for its owning account.
+
+Inside a newly created container, clone with any Git transport and install:
 
 ```bash
 cd /workspace
-git clone --recurse-submodules https://github.com/ecolab-nus/loom.git
+git clone --recurse-submodules YOUR_GIT_URL loom
 cd loom
 bash install-docker.sh
 ```
 
-Terminal editors, shells, and tools such as tmux can all run in this container
-shell. No VS Code installation is required.
+The `-A` option forwards the workstation's SSH agent. If `YOUR_GIT_URL` uses
+SSH, first load the corresponding key into the workstation's agent. The
+forwarded agent lets Git authenticate without placing a private key on either
+the Docker host or the container.
 
 For a non-interactive remote command:
 
 ```bash
-ssh docker-host \
-  'docker exec loom-dev bash -lc "cd /workspace/loom && uv run python -c '\''import loom'\''"'
+ssh -A -J docker-host \
+  -o HostKeyAlias=loom-dev-on-docker-host \
+  -p 2222 root@localhost \
+  'cd /workspace/loom && uv run python -c "import loom"'
 ```
 
 ## 7. Installation Options
@@ -257,7 +273,7 @@ Dev Container-aware tools manage their own containers. For the named
 ```bash
 docker stop loom-dev
 docker start loom-dev
-docker exec -it loom-dev bash
+ssh -A -p 2222 root@localhost
 ```
 
 Deleting the container does not delete its named volume:
@@ -268,6 +284,14 @@ docker rm --force loom-dev
 
 Recreate it with the command in section 6 and the same `loom-workspace`
 volume.
+
+If the Docker host's authorized keys change, refresh the container copy and
+restart SSH:
+
+```bash
+docker cp ~/.ssh/authorized_keys loom-dev:/run/loom/authorized_keys
+docker restart loom-dev
+```
 
 Do not remove the volume unless you intend to delete the checkout, Python
 environment, caches, and all build output:
@@ -305,7 +329,7 @@ a local override of `devcontainer.json` when hardware access is needed.
 
 The image's toolchain paths and pinned source revisions are defined in the
 repository
-[Dockerfile](https://github.com/ecolab-nus/loom/blob/main/Dockerfile).
+[Dockerfile](https://github.com/ecolab-nus/loom/blob/main/docker/Dockerfile).
 `MLIR_DIR`, `LLVM_DIR`, and related variables are available in Dev Container
 and `docker exec` sessions.
 
@@ -313,6 +337,7 @@ Buildx is required only when rebuilding the image:
 
 ```bash
 docker buildx build \
+  --file docker/Dockerfile \
   --load \
   --tag loom_dev:local \
   .
