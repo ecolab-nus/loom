@@ -65,7 +65,311 @@ Rust MLAR library for architecture description and schedule evaluation. The root
 
 Optional backend project for lowering bufferized Loom MLIR into TTKernel/tt-mlir flows. It is included as a submodule but is not built by `install-dev.sh` because it requires external Tenstorrent dependencies.
 
-## Quick Start
+## Docker Development Environment
+
+The recommended environment for developing the Tenstorrent backend is the
+prebuilt [`ftod/loom_dev:latest`](https://hub.docker.com/r/ftod/loom_dev)
+image on Docker Hub. The image is built from the repository
+[Dockerfile](Dockerfile) and contains:
+
+- the LLVM/MLIR 22 toolchain from the Tenstorrent tt-mlir CI image;
+- tt-mlir at commit
+  `5009f4764a31ff08e7cd838ed5747ae8a368a7e6`;
+- TT-Metal source at commit
+  `ad07818dd4d704d654359c8392794ef8ea8ceec4`;
+- the tt-mlir compiler binaries and static libraries required by
+  `loom2ttkernel`;
+- Rust installed through rustup, plus the `tt-smi` and `tt-flash` tools.
+
+The important paths are already exported in the image:
+
+```text
+MLIR_DIR=/opt/ttmlir-toolchain/lib/cmake/mlir
+LLVM_DIR=/opt/ttmlir-toolchain/lib/cmake/llvm
+TTMLIR_SOURCE_DIR=/opt/tt-mlir
+TTMLIR_BUILD_DIR=/opt/tt-mlir/build
+TT_METAL_HOME=/opt/tt-mlir/third_party/tt-metal/src/tt-metal
+```
+
+### 1. Install Docker and Get the Source
+
+Docker Engine is required. The Buildx plugin is only needed when rebuilding
+the image locally:
+
+```bash
+docker version
+docker buildx version  # optional for Docker Hub users
+```
+
+Clone Loom together with all submodules:
+
+```bash
+git clone --recurse-submodules https://github.com/ecolab-nus/loom.git
+cd loom
+```
+
+For an existing checkout, initialize or repair the submodules with:
+
+```bash
+git submodule update --init --recursive
+```
+
+### 2. Download or Build the Image
+
+The normal path is to download the prebuilt image from Docker Hub:
+
+```bash
+docker pull ftod/loom_dev:latest
+docker image inspect ftod/loom_dev:latest >/dev/null
+```
+
+The published image currently targets `linux/amd64`. After pulling it, proceed
+directly to the verification and workspace build steps below; it is not
+necessary to run `docker build`.
+
+To rebuild the image locally after changing the Dockerfile, pull the
+Tenstorrent base and assign the result a separate local tag:
+
+```bash
+docker pull ghcr.io/tenstorrent/tt-mlir/tt-mlir-ci-ubuntu-24-04:latest
+
+docker buildx build \
+  --load \
+  --tag loom_dev:local \
+  .
+```
+
+The first build downloads and compiles tt-mlir and can take several minutes.
+Subsequent builds reuse the BuildKit cache. Expect roughly 16 GB of local disk
+usage for the expanded image, in addition to BuildKit's compilation cache.
+
+The pinned source revisions can be overridden deliberately:
+
+```bash
+docker buildx build \
+  --load \
+  --tag loom_dev:local \
+  --build-arg TTMLIR_COMMIT=<tt-mlir-commit> \
+  --build-arg TT_METAL_COMMIT=<tt-metal-commit> \
+  .
+```
+
+For an offline machine, transfer an image archive and load it:
+
+```bash
+gzip -dc loom_dev-latest.tar.gz | docker load
+docker image inspect ftod/loom_dev:latest >/dev/null
+```
+
+To create such an archive on a machine that already has the image:
+
+```bash
+docker save ftod/loom_dev:latest | gzip >loom_dev-latest.tar.gz
+```
+
+Use `loom_dev:local` instead of `ftod/loom_dev:latest` in the commands below
+when testing a locally rebuilt image.
+
+### 3. Verify the Image
+
+Run these checks before building Loom:
+
+```bash
+docker run --rm ftod/loom_dev:latest bash -lc '
+  set -e
+  test -f "$MLIR_DIR/MLIRConfig.cmake"
+  test -f "$LLVM_DIR/LLVMConfig.cmake"
+  test -f "$TTMLIR_BUILD_DIR/lib/libMLIRTTKernelDialect.a"
+  test -f "$TTMLIR_BUILD_DIR/lib/libMLIRTTMetalDialect.a"
+  git -C "$TTMLIR_SOURCE_DIR" rev-parse HEAD
+  git -C "$TT_METAL_HOME" rev-parse HEAD
+  ttmlir-opt --version
+  mlir-opt --version
+  rustc --version
+  cargo --version
+'
+```
+
+The two printed Git revisions should match the commits listed at the start of
+this section.
+
+### 4. Start the Development Container
+
+From the Loom repository root, create a named container and mount the checkout
+at `/workspace`:
+
+```bash
+docker run -it \
+  --name loom-dev \
+  --mount type=bind,src="$(pwd)",dst=/workspace \
+  --workdir /workspace \
+  ftod/loom_dev:latest
+```
+
+The named container keeps tools installed into its writable layer. Leave it
+with `exit`, then resume the same environment later:
+
+```bash
+docker start --attach --interactive loom-dev
+```
+
+Use `--rm` instead of `--name loom-dev` when a disposable container is
+preferred:
+
+```bash
+docker run --rm -it \
+  --mount type=bind,src="$(pwd)",dst=/workspace \
+  --workdir /workspace \
+  ftod/loom_dev:latest
+```
+
+Commands in the container run as root, so newly generated files in the mounted
+checkout may be owned by root on the host. If necessary, restore ownership
+after exiting:
+
+```bash
+sudo chown -R "$(id -u):$(id -g)" .venv build third_party/*/build
+```
+
+Omit paths that do not exist.
+
+### 5. Build the Complete Loom Workspace
+
+The following commands run **inside the container**. Install `uv` once in a
+named container:
+
+```bash
+python -m pip install "uv>=0.11"
+uv --version
+```
+
+To discard native build products from a previous host or toolchain:
+
+```bash
+rm -rf \
+  build \
+  third_party/loom-dataflow/build \
+  third_party/loom2ttkernel/build \
+  third_party/loom-mlar/target
+```
+
+Prepare the locked Python 3.10 environment, build and install the
+`loom-dataflow` Python extension, and build the MLAR evaluator:
+
+```bash
+uv sync --locked --inexact \
+  --extra dataflow \
+  --extra helion \
+  --no-install-package loom-dataflow
+
+uv sync --locked --inexact \
+  --extra dataflow \
+  --extra helion \
+  --reinstall-package loom-dataflow
+
+bash scripts/build-mlar.sh
+```
+
+Create a persistent CMake build of `loom-dataflow`. This supplies the static
+libraries and generated dialect headers needed by `loom2ttkernel`:
+
+```bash
+bash third_party/loom-dataflow/build.sh \
+  --mlir-dir="$MLIR_DIR"
+```
+
+Finally build the optional TTKernel backend against the tt-mlir artifacts in
+the image:
+
+```bash
+bash third_party/loom2ttkernel/build.sh \
+  -DMLIR_DIR="$MLIR_DIR" \
+  -DLLVM_DIR="$LLVM_DIR" \
+  -DTTMLIR_SOURCE_DIR="$TTMLIR_SOURCE_DIR" \
+  -DTTMLIR_BUILD_DIR="$TTMLIR_BUILD_DIR"
+```
+
+Do not use `install-dev.sh` for this Docker workflow. That script is the native
+host installation path and intentionally builds the pinned
+`third_party/llvm-project` toolchain. The commands above reuse the LLVM/MLIR
+installation already present in the image.
+
+### 6. Smoke Tests and Running Loom
+
+Verify the Python packages and generated native executables:
+
+```bash
+uv run python -c 'import loom, loom_pipeline, helion_mlir'
+
+test -x third_party/loom-mlar/tests/2d_mesh/bin/eval_system
+test -x third_party/loom2ttkernel/build/bin/tileloom_to_ttkernel_opt
+
+uv run pytest
+```
+
+Run an example kernel:
+
+```bash
+uv run python kernels/matmul.py \
+  --config kernels/config_files/matmul.json \
+  --njobs 16 \
+  --debug
+```
+
+### 7. Run with Tenstorrent Hardware
+
+LLVM/MLIR compilation does not require a Tenstorrent device. For hardware
+access, the kernel driver and HugePages must be configured on the **host**;
+the Dockerfile deliberately uses tt-installer's container mode and does not
+modify the host.
+
+First verify the host:
+
+```bash
+tt-smi
+test -e /dev/tenstorrent
+test -d /dev/hugepages-1G
+```
+
+Then pass all Tenstorrent devices and the HugePages mount into the container:
+
+```bash
+docker run -it \
+  --name loom-dev-hw \
+  --device /dev/tenstorrent \
+  --mount type=bind,src=/dev/hugepages-1G,dst=/dev/hugepages-1G \
+  --mount type=bind,src="$(pwd)",dst=/workspace \
+  --workdir /workspace \
+  ftod/loom_dev:latest
+```
+
+Do not pass only an individual entry such as `/dev/tenstorrent/0`; Tenstorrent
+documents that all devices must be passed through together. See the
+[Tenstorrent Docker setup guide](https://docs.tenstorrent.com/tt-forge-onnx/getting_started_docker.html)
+and the
+[tt-installer container-mode guidance](https://docs.tenstorrent.com/tt-vscode-toolkit/lessons/tt-installer/)
+for host setup details.
+
+### 8. Common Docker Operations
+
+```bash
+# Show the image
+docker image ls ftod/loom_dev:latest
+
+# Show stopped and running development containers
+docker ps --all --filter name=loom-dev
+
+# Resume the named container
+docker start --attach --interactive loom-dev
+
+# Delete the named container; the bind-mounted source remains on the host
+docker rm loom-dev
+
+# Rebuild after changing the Dockerfile
+docker buildx build --load --tag loom_dev:local .
+```
+
+## Native Quick Start
 
 ### Prerequisites
 
