@@ -25,3 +25,8 @@ test/
 # tmp logs
 tmp_logs/
 test*.sh
+
+# Docusaurus
+website/node_modules/
+website/.docusaurus/
+website/build/
