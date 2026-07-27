@@ -5,5 +5,5 @@
   "remoteUser": "root",
   "init": true,
   "overrideCommand": false,
-  "postCreateCommand": "bash install-docker.sh"
+  "postCreateCommand": "git config --global --add safe.directory '${containerWorkspaceFolder}' && bash install-docker.sh"
 }
