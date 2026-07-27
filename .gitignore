@@ -27,6 +27,7 @@ test/
 # tmp logs
 tmp_logs/
 test*.sh
+tmp_output/
 
 # Docusaurus
 website/node_modules/

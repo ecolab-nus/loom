@@ -1,6 +1,6 @@
 {
   "$schema": "https://raw.githubusercontent.com/devcontainers/spec/main/schemas/devContainer.base.schema.json",
-  "name": "Loom",
+  "name": "Loom (Standard)",
   "image": "ftod/loom_dev:latest",
   "remoteUser": "root",
   "init": true,
