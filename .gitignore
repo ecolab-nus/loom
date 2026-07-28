@@ -31,6 +31,6 @@ test*.sh
 tmp_output/
 
 # Docusaurus
-website/node_modules/
-website/.docusaurus/
-website/build/
+docs-site/node_modules/
+docs-site/.docusaurus/
+docs-site/build/

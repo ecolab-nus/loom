@@ -25,7 +25,7 @@ required.
 Install the site dependencies and start the local development server:
 
 ```bash
-cd website
+cd docs-site
 npm install
 npm start
 ```
@@ -33,19 +33,19 @@ npm start
 Create a production build:
 
 ```bash
-cd website
+cd docs-site
 npm run build
 npm run serve
 ```
 
-The generated static site is written to `website/build/`.
+The generated static site is written to `docs-site/build/`.
 
 The site defaults to `/` and supports deployment-specific URLs through
 environment variables. For example, a GitHub Pages project site can be built
 with:
 
 ```bash
-cd website
+cd docs-site
 DOCUSAURUS_URL=https://ecolab-nus.github.io \
 DOCUSAURUS_BASE_URL=/loom/ \
 npm run build

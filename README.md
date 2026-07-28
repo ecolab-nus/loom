@@ -114,13 +114,13 @@ function.
 Preview the Docusaurus site locally with Node.js 20 or newer:
 
 ```bash
-cd website
+cd docs-site
 npm install
 npm start
 ```
 
 Then open [http://localhost:3000](http://localhost:3000). Use
-`npm run build` to create the production site under `website/build/`.
+`npm run build` to create the production site under `docs-site/build/`.
 
 - [Documentation index](docs/README.md)
 - [Architecture and compilation pipeline](docs/architecture.md)
