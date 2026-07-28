@@ -2,9 +2,12 @@
   "$schema": "https://raw.githubusercontent.com/devcontainers/spec/main/schemas/devContainer.base.schema.json",
   "name": "Loom (Tenstorrent)",
   "image": "ftod/loom_dev:latest",
-  "remoteUser": "root",
+  "remoteUser": "ubuntu",
+  "updateRemoteUserUID": true,
   "init": true,
   "overrideCommand": false,
+  "workspaceMount": "source=${localWorkspaceFolder},target=/workspace/${localWorkspaceFolderBasename},type=bind",
+  "workspaceFolder": "/workspace/${localWorkspaceFolderBasename}",
   "postCreateCommand": "bash install-docker.sh",
   "runArgs": [
     "--device=/dev/tenstorrent",
