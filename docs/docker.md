@@ -51,9 +51,12 @@ The repository configuration is:
   "$schema": "https://raw.githubusercontent.com/devcontainers/spec/main/schemas/devContainer.base.schema.json",
   "name": "Loom",
   "image": "ftod/loom_dev:latest",
-  "remoteUser": "root",
+  "remoteUser": "ubuntu",
+  "updateRemoteUserUID": true,
   "init": true,
   "overrideCommand": false,
+  "workspaceMount": "source=${localWorkspaceFolder},target=/workspace/${localWorkspaceFolderBasename},type=bind",
+  "workspaceFolder": "/workspace/${localWorkspaceFolderBasename}",
   "postCreateCommand": "bash install-docker.sh"
 }
 ```
@@ -61,7 +64,9 @@ The repository configuration is:
 It has the following behavior:
 
 - pulls the published Loom development image;
-- runs the container as `root`, matching the image toolchain;
+- runs VS Code terminals and workspace setup as `ubuntu`, with its UID/GID
+  matched to the Docker host user;
+- permits explicit passwordless `sudo` for container administration;
 - enables a small init process;
 - keeps the image's `sleep infinity` command;
 - creates Loom's `.venv` and builds all workspace components after cloning.

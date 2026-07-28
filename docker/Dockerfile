@@ -54,6 +54,15 @@ SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
 ARG TT_INSTALLER_VERSION=v2.1.0
 
+# Dev Containers runs terminals and workspace setup as the unprivileged
+# Ubuntu user. Allow developers to elevate explicitly for container
+# administration without running normal workspace commands as root.
+RUN test "$(id -u ubuntu)" = "1000" \
+    && printf '%s\n' 'ubuntu ALL=(ALL:ALL) NOPASSWD:ALL' \
+      > /etc/sudoers.d/ubuntu \
+    && chmod 0440 /etc/sudoers.d/ubuntu \
+    && visudo -cf /etc/sudoers.d/ubuntu
+
 ENV DEBIAN_FRONTEND=noninteractive \
     TTMLIR_TOOLCHAIN_DIR=/opt/ttmlir-toolchain \
     TTMLIR_SOURCE_DIR=/opt/tt-mlir \
