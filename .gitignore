@@ -8,6 +8,7 @@
 .venv/
 .uv-cache/
 .uv-python/
+.cargo-home/
 *.egg-info/
 __pycache__/
 *.py[cod]

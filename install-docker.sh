@@ -112,6 +112,7 @@ remove_if_ignored() {
 GENERATED_DIRECTORY_NAMES=(
     build target debug dist
     .venv .uv-cache .uv-python
+    .cargo-home
     __pycache__ .pytest_cache .ruff_cache .mypy_cache
     .cache .triton_cache .tox .nox htmlcov .hypothesis
     .eggs '*.egg-info' CMakeFiles Testing _deps
@@ -240,6 +241,13 @@ printf "  %-18s %s\n" "TTMLIR_BUILD_DIR" "$TTMLIR_BUILD_DIR"
 export UV_LINK_MODE="${UV_LINK_MODE:-copy}"
 export UV_PYTHON_INSTALL_DIR="${UV_PYTHON_INSTALL_DIR:-$REPO_ROOT/.uv-python}"
 export UV_CACHE_DIR="${UV_CACHE_DIR:-$REPO_ROOT/.uv-cache}"
+
+# The image's Cargo installation is readable but its registry is owned by
+# root. Use a workspace-local Cargo home when the configured one is not
+# writable, while keeping /opt/cargo/bin on PATH for the toolchain itself.
+if [ -z "${CARGO_HOME:-}" ] || [ ! -w "$CARGO_HOME" ]; then
+    export CARGO_HOME="$REPO_ROOT/.cargo-home"
+fi
 run_uv() {
     env -u VIRTUAL_ENV uv "$@"
 }
@@ -249,7 +257,8 @@ echo "=== Initializing Git submodules ==="
 if [ -f "$REPO_ROOT/third_party/loom-dataflow/CMakeLists.txt" ] \
     && [ -f "$REPO_ROOT/third_party/helion-mlir/pyproject.toml" ] \
     && [ -f "$REPO_ROOT/third_party/loom-mlar/Cargo.toml" ] \
-    && [ -f "$REPO_ROOT/third_party/loom2ttkernel/CMakeLists.txt" ]; then
+    && [ -f "$REPO_ROOT/third_party/loom2ttkernel/CMakeLists.txt" ] \
+    && [ -f "$REPO_ROOT/third_party/adl-dialect/CMakeLists.txt" ]; then
     echo "  [OK] Submodules are already populated"
 else
     git -c safe.directory="$REPO_ROOT" -C "$REPO_ROOT" \
@@ -276,10 +285,27 @@ else
 fi
 
 if [ "$SKIP_DATAFLOW" = "0" ]; then
+    ADL_SOURCE_DIR="$REPO_ROOT/third_party/adl-dialect"
+    ADL_BUILD_DIR="$ADL_SOURCE_DIR/build"
+    ADL_INSTALL_DIR="$ADL_BUILD_DIR/install"
+    export ADLDialect_DIR="$ADL_INSTALL_DIR/lib/cmake/ADLDialect"
+
+    echo ""
+    echo "=== Building standalone ADL dialect ==="
+    cmake -S "$ADL_SOURCE_DIR" -B "$ADL_BUILD_DIR" -G Ninja \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_INSTALL_PREFIX="$ADL_INSTALL_DIR" \
+        -DMLIR_DIR="$MLIR_DIR" \
+        -DLLVM_USE_LINKER=lld \
+        -DADL_INCLUDE_TESTS=OFF
+    cmake --build "$ADL_BUILD_DIR" --target install
+    require_file "$ADLDialect_DIR/ADLDialectConfig.cmake"
+
     echo ""
     echo "=== Building loom-dataflow CMake artifacts ==="
     bash "$REPO_ROOT/third_party/loom-dataflow/build.sh" \
-        --mlir-dir="$MLIR_DIR"
+        --mlir-dir="$MLIR_DIR" \
+        --adl-dialect-dir="$ADLDialect_DIR"
 
     echo ""
     echo "=== Installing the loom-dataflow Python extension ==="
@@ -307,6 +333,7 @@ if [ "$SKIP_TTKERNEL" = "0" ]; then
     bash "$REPO_ROOT/third_party/loom2ttkernel/build.sh" \
         -DMLIR_DIR="$MLIR_DIR" \
         -DLLVM_DIR="$LLVM_DIR" \
+        -DADLDialect_DIR="$ADLDialect_DIR" \
         -DTTMLIR_SOURCE_DIR="$TTMLIR_SOURCE_DIR" \
         -DTTMLIR_BUILD_DIR="$TTMLIR_BUILD_DIR"
 fi

@@ -224,6 +224,8 @@ Available options for manual runs are:
 bash install-docker.sh [OPTIONS]
 
 Options:
+  --clean             Remove generated files before installing
+  --clean-only        Remove generated files and exit
   --skip-mlar         Skip the loom-mlar Rust evaluator
   --skip-dataflow     Skip loom-dataflow and loom2ttkernel
   --skip-helion       Skip helion-mlir
@@ -235,15 +237,12 @@ Environment:
   LOOM_EVAL_SYSTEM    Path to a prebuilt eval_system binary
 ```
 
-Build products made with another toolchain should be removed before
-installation:
+The installer builds the standalone ADL dialect first and supplies its CMake
+package to both `loom-dataflow` and `loom2ttkernel`. Build products made with
+another toolchain can be removed automatically:
 
 ```bash
-rm -rf \
-  build \
-  third_party/loom-dataflow/build \
-  third_party/loom2ttkernel/build \
-  third_party/loom-mlar/target
+bash install-docker.sh --clean
 ```
 
 ## 8. Smoke Tests
