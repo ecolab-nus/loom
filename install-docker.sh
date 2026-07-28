@@ -179,7 +179,6 @@ clean_ignored_children() {
 
 clean_workspace() {
     local cleanup_command
-    local generated_path
 
     for cleanup_command in dirname find git rm; do
         require_command "$cleanup_command"
@@ -194,14 +193,7 @@ clean_workspace() {
     clean_ignored_children \
         "$REPO_ROOT/third_party/loom-mlar/tests/2d_mesh/bin"
 
-    if [ -d "$REPO_ROOT/test" ]; then
-        while IFS= read -r -d '' generated_path; do
-            remove_if_ignored "$generated_path"
-        done < <(
-            find "$REPO_ROOT/test" -mindepth 2 -maxdepth 2 \
-                -type d -name constraints -print0
-        )
-    fi
+    remove_generated_path "$REPO_ROOT/test"
 
     echo "Workspace cleanup complete"
 }
