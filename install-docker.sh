@@ -5,6 +5,8 @@
 #   bash install-docker.sh [OPTIONS]
 #
 # Options:
+#   --clean             Remove generated files before installing
+#   --clean-only        Remove generated files and exit
 #   --skip-mlar         Skip the loom-mlar Rust evaluator
 #   --skip-dataflow     Skip loom-dataflow and loom2ttkernel
 #   --skip-helion       Skip helion-mlir
@@ -18,6 +20,8 @@
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")" && pwd)"
+CLEAN=0
+CLEAN_ONLY=0
 SKIP_MLAR=0
 SKIP_DATAFLOW=0
 SKIP_HELION=0
@@ -26,6 +30,8 @@ REBUILD_DATAFLOW=0
 
 for arg in "$@"; do
     case "$arg" in
+        --clean)             CLEAN=1 ;;
+        --clean-only)        CLEAN=1; CLEAN_ONLY=1 ;;
         --skip-mlar)        SKIP_MLAR=1 ;;
         --skip-dataflow)    SKIP_DATAFLOW=1 ;;
         --skip-helion)      SKIP_HELION=1 ;;
@@ -58,6 +64,153 @@ require_command() {
 require_file() {
     [ -f "$1" ] || fail "required file not found: $1"
 }
+
+remove_generated_path() {
+    local generated_path="$1"
+    local relative_path
+
+    case "$generated_path" in
+        "$REPO_ROOT"/*) ;;
+        *) fail "refusing to clean path outside the repository: $generated_path" ;;
+    esac
+
+    if [ ! -e "$generated_path" ] && [ ! -L "$generated_path" ]; then
+        return
+    fi
+
+    relative_path="${generated_path#"$REPO_ROOT"/}"
+    echo "  remove $relative_path"
+    rm -rf -- "$generated_path"
+}
+
+remove_if_ignored() {
+    local generated_path="$1"
+    local git_root
+    local relative_path
+
+    git_root="$(
+        git -C "$(dirname "$generated_path")" \
+            rev-parse --show-toplevel 2>/dev/null
+    )" || return
+
+    case "$git_root" in
+        "$REPO_ROOT"|"$REPO_ROOT"/*) ;;
+        *) fail "refusing to clean path owned by a repository outside Loom" ;;
+    esac
+
+    relative_path="${generated_path#"$git_root"/}"
+    if git -C "$git_root" ls-files --error-unmatch \
+        -- "$relative_path" >/dev/null 2>&1; then
+        return
+    fi
+
+    if git -C "$git_root" check-ignore -q -- "$relative_path"; then
+        remove_generated_path "$generated_path"
+    fi
+}
+
+GENERATED_DIRECTORY_NAMES=(
+    build target debug dist
+    .venv .uv-cache .uv-python
+    __pycache__ .pytest_cache .ruff_cache .mypy_cache
+    .cache .triton_cache .tox .nox htmlcov .hypothesis
+    .eggs '*.egg-info' CMakeFiles Testing _deps
+    .docusaurus node_modules tmp_logs tmp_output
+)
+
+GENERATED_FILE_NAMES=(
+    '*.pyc' '*.pyo'
+    '*.o' '*.obj' '*.so' '*.dylib' '*.dll' '*.a' '*.lib' '*.d'
+    '*.gch' '*.pch'
+    '*.tmp' '*.log' '*.swp' '*.swo' '*~' temp.json
+    CMakeCache.txt cmake_install.cmake compile_commands.json
+)
+
+find_generated_paths() {
+    local path_kind="$1"
+    shift
+    local candidate_name
+    local -a name_expression=()
+
+    for candidate_name in "$@"; do
+        if [ "${#name_expression[@]}" -gt 0 ]; then
+            name_expression+=(-o)
+        fi
+        name_expression+=(-name "$candidate_name")
+    done
+
+    if [ "$path_kind" = "directory" ]; then
+        find "$REPO_ROOT" -xdev \
+            \( -name .git -o -path "$REPO_ROOT/.codex" \) -prune -o \
+            -type d \( "${name_expression[@]}" \) -prune -print0
+    else
+        find "$REPO_ROOT" -xdev \
+            \( -name .git -o -path "$REPO_ROOT/.codex" \) -prune -o \
+            \( -type f -o -type l \) \
+            \( "${name_expression[@]}" \) -print0
+    fi
+}
+
+clean_generated_paths() {
+    local path_kind="$1"
+    shift
+    local generated_path
+
+    while IFS= read -r -d '' generated_path; do
+        remove_if_ignored "$generated_path"
+    done < <(find_generated_paths "$path_kind" "$@")
+}
+
+clean_ignored_children() {
+    local generated_directory="$1"
+    local generated_path
+
+    if [ ! -d "$generated_directory" ]; then
+        return
+    fi
+
+    while IFS= read -r -d '' generated_path; do
+        remove_if_ignored "$generated_path"
+    done < <(
+        find "$generated_directory" -mindepth 1 -maxdepth 1 -print0
+    )
+}
+
+clean_workspace() {
+    local cleanup_command
+    local generated_path
+
+    for cleanup_command in dirname find git rm; do
+        require_command "$cleanup_command"
+    done
+
+    echo ""
+    echo "=== Cleaning generated workspace files ==="
+    clean_generated_paths \
+        directory "${GENERATED_DIRECTORY_NAMES[@]}"
+    clean_generated_paths \
+        file "${GENERATED_FILE_NAMES[@]}"
+    clean_ignored_children \
+        "$REPO_ROOT/third_party/loom-mlar/tests/2d_mesh/bin"
+
+    if [ -d "$REPO_ROOT/test" ]; then
+        while IFS= read -r -d '' generated_path; do
+            remove_if_ignored "$generated_path"
+        done < <(
+            find "$REPO_ROOT/test" -mindepth 2 -maxdepth 2 \
+                -type d -name constraints -print0
+        )
+    fi
+
+    echo "Workspace cleanup complete"
+}
+
+if [ "$CLEAN" = "1" ]; then
+    clean_workspace
+    if [ "$CLEAN_ONLY" = "1" ]; then
+        exit 0
+    fi
+fi
 
 echo ""
 echo "=== Checking Docker toolchain ==="

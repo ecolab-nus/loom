@@ -8,7 +8,7 @@
   "overrideCommand": false,
   "workspaceMount": "source=${localWorkspaceFolder},target=/workspace/${localWorkspaceFolderBasename},type=bind",
   "workspaceFolder": "/workspace/${localWorkspaceFolderBasename}",
-  "postCreateCommand": "bash install-docker.sh",
+  "postCreateCommand": "bash install-docker.sh --clean",
   "runArgs": [
     "--device=/dev/tenstorrent",
     "--mount",
