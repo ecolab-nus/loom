@@ -14,6 +14,8 @@
     "--cap-add=SETUID",
     "--cap-add=SETGID",
     "--cap-add=SYS_PTRACE",
+    "--cap-add=NET_ADMIN",
+    "--cap-add=NET_RAW",
     "--security-opt=seccomp=unconfined",
     "--security-opt=apparmor=unconfined"
   ],

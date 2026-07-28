@@ -36,6 +36,13 @@ from the remote window.
 VS Code pulls the development image, creates the container, mounts the
 checkout, and runs `install-docker.sh` automatically.
 
+#### Tips
+use 
+```bash
+./docker/install-codex-container-sandbox.sh
+```
+to get the codex sandbox working in the container.
+
 ### Without VS Code
 
 On the Docker host, run the provided launcher from a Loom checkout:
