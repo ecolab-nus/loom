@@ -2,7 +2,7 @@
 
 Standalone CLI script. Run from the repo root:
 
-    python kernels/flash_attention.py --config kernels/config_files/flash_attention.json --njobs 8 --debug --topk-candidates 5 --topk-block-size 3
+    uv python kernels/flash_attention.py --config kernels/config_files/flash_attention.json --njobs 8 --debug --topk-candidates 1 --topk-block-size 1
 
 This script inherits the full Loom CLI and pipeline from LoomKernel.
 To write your own kernel, copy this file, replace the kernel body
@@ -20,7 +20,7 @@ import helion.language as hl
 
 from loom import LoomKernel
 from loom.loom_utils.kernel_size import resolve_kernel_shape_args
-from helion_mlir.custom_op import broadcast
+from helion_mlir.custom_op import broadcast, set_memory_space
 
 
 def _flash__attention(
@@ -45,7 +45,7 @@ def _flash__attention(
         acc = hl.zeros([tile_b, tile_m, head_dim], dtype=torch.float16)
         q = q_view[tile_b, tile_m, :]
         for tile_n in hl.tile(v_view.size(1)):
-            k = k_view[tile_b, :, tile_n]
+            k = set_memory_space(k_view[tile_b, :, tile_n], local_mem_kind=1)
             qk = torch.bmm(q, k)
             qk = qk * qk_scale_dev
             m_ij = torch.maximum(m_i, torch.amax(qk, -1, keepdim=True))

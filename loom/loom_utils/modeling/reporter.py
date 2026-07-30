@@ -228,7 +228,7 @@ def _print_func_breakdown(
             else (None, None)
         )
         cost_display = f"{cost:,}" if cost is not None else "?"
-        p(f"{indent}  {label}: {cost_display} {unit}")
+        p(f"{indent}  {cost_display:>10} {unit}  {label}")
 
 
 def print_active_constraints(
