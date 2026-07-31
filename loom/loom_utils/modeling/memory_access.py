@@ -20,7 +20,7 @@ class WorkloadVisit:
 class MemoryAccessSummary:
     mem_kind: int
     access: str
-    tensor_type: str
+    op_label: str
     total_trip: int
 
 
@@ -69,29 +69,26 @@ def summarize_memory_accesses(
     variant: dict,
     assignments: dict[str, int],
 ) -> list[MemoryAccessSummary]:
-    """Aggregate accesses by memory kind, direction, and concrete tensor type."""
+    """Aggregate operand accesses by memory kind, direction, and op label."""
     root = variant.get("kernel_block", variant)
     totals: dict[tuple[int, str, str], int] = {}
 
     for visit in walk_workloads(root, assignments):
-        for access in visit.func.get("memory_accesses", []):
-            direction = str(access.get("access", "")).lower()
-            if direction not in ("read", "write"):
-                continue
-            shape = [
-                parse_expr(dim).eval(assignments)
-                for dim in access.get("shape", [])
-            ]
-            element_type = str(access.get("element_type", "unknown"))
-            tensor_type = _format_tensor_type(shape, element_type)
-            key = (int(access.get("mem_kind", 0)), direction, tensor_type)
-            totals[key] = totals.get(key, 0) + visit.total_trip
+        op_label = str(
+            visit.func.get("op_label", visit.func.get("name", "unknown"))
+        )
+        for direction in ("read", "write"):
+            for mem_kind in _parse_operand_mem_kinds(
+                visit.func.get(direction, "")
+            ):
+                key = (mem_kind, direction, op_label)
+                totals[key] = totals.get(key, 0) + visit.total_trip
 
     return [
         MemoryAccessSummary(
             mem_kind=key[0],
             access=key[1],
-            tensor_type=key[2],
+            op_label=key[2],
             total_trip=total_trip,
         )
         for key, total_trip in sorted(
@@ -108,36 +105,23 @@ def summarize_memory_accesses(
 def format_memory_access_summary(
     summaries: list[MemoryAccessSummary],
 ) -> list[str]:
-    """Format summaries as one aligned table with explicit READ/WRITE rows."""
+    """Format one row per memory kind, direction, and operation label."""
     lines = ["Memory Access Summary"]
     if not summaries:
         lines.append("  (no memory access metadata)")
         return lines
 
-    by_kind_access: dict[tuple[int, str], list[MemoryAccessSummary]] = {}
-    mem_kinds = sorted({summary.mem_kind for summary in summaries})
-    for summary in summaries:
-        by_kind_access.setdefault(
-            (summary.mem_kind, summary.access), []
-        ).append(summary)
+    rows = [
+        (
+            str(entry.mem_kind),
+            entry.access.upper(),
+            f"{entry.total_trip:,}",
+            entry.op_label,
+        )
+        for entry in summaries
+    ]
 
-    rows: list[tuple[str, str, str]] = []
-    for mem_kind in mem_kinds:
-        for direction in ("read", "write"):
-            entries = by_kind_access.get((mem_kind, direction), [])
-            if not entries:
-                rows.append((str(mem_kind), direction.upper(), "-"))
-                continue
-            for entry in entries:
-                rows.append(
-                    (
-                        str(mem_kind),
-                        direction.upper(),
-                        f"{entry.total_trip:,} * {entry.tensor_type}",
-                    )
-                )
-
-    headers = ("mem_kind", "access", "breakdown")
+    headers = ("mem_kind", "access", "count", "op_label")
     widths = [
         max(len(headers[i]), *(len(row[i]) for row in rows))
         for i in range(len(headers))
@@ -155,6 +139,20 @@ def format_memory_access_summary(
     return lines
 
 
-def _format_tensor_type(shape: list[int], element_type: str) -> str:
-    body = "x".join([*(str(dim) for dim in shape), element_type])
-    return f"tensor<{body}>"
+def _parse_operand_mem_kinds(raw: object) -> list[int]:
+    """Parse the ETG `%ssa: mem_kind;%ssa: mem_kind` representation."""
+    text = str(raw).strip()
+    if not text:
+        return []
+    kinds: list[int] = []
+    for operand in text.split(";"):
+        name, separator, kind = operand.rpartition(":")
+        if not separator or not name.strip().startswith("%"):
+            raise ValueError(f"invalid ETG operand access metadata: {operand!r}")
+        try:
+            kinds.append(int(kind.strip()))
+        except ValueError as exc:
+            raise ValueError(
+                f"invalid ETG memory kind in operand metadata: {operand!r}"
+            ) from exc
+    return kinds
