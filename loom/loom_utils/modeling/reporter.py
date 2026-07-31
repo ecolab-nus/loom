@@ -2,12 +2,18 @@
 """
 
 from __future__ import annotations
-import sys
-from dataclasses import dataclass
-from typing import Any, Callable, TextIO
 
-from ..ast import parse_expr, parse_constraint
+import sys
+from collections.abc import Callable
+from dataclasses import dataclass
+from typing import Any, TextIO
+
+from ..ast import parse_constraint, parse_expr
 from .analysis import ConstraintAnalysis, ConstraintStatus
+from .memory_access import (
+    format_memory_access_summary,
+    summarize_memory_accesses,
+)
 
 CostParser = Callable[[Any], Any]
 
@@ -63,6 +69,11 @@ def print_breakdown(
     p()
 
     root = variant.get("kernel_block", variant)
+    for line in format_memory_access_summary(
+        summarize_memory_accesses(variant, assignments)
+    ):
+        p(line)
+    p()
     _print_block(root, assignments, depth=1, p=p, cost_parser=cost_parser, unit=unit)
 
     p(f"  T_total = {min_val:,} {unit}")
