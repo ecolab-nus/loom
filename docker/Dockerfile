@@ -2,8 +2,11 @@
 
 ARG BASE_IMAGE=ghcr.io/tenstorrent/tt-mlir/tt-mlir-ci-ubuntu-24-04:latest
 ARG UV_VERSION=0.11.32
+ARG NODE_VERSION=24.18.0
 
 FROM ghcr.io/astral-sh/uv:${UV_VERSION} AS uv-bin
+
+FROM node:${NODE_VERSION}-bookworm-slim AS node-bin
 
 FROM ${BASE_IMAGE} AS ttmlir-builder
 
@@ -110,6 +113,16 @@ RUN curl --proto '=https' --tlsv1.2 -fsSL --retry 5 https://sh.rustup.rs \
 
 # Copy the pinned uv binaries from Astral's official distroless image.
 COPY --from=uv-bin /uv /uvx /usr/local/bin/
+
+# Ubuntu 24.04 packages Node.js 18, but Docusaurus requires Node.js 20 or
+# newer. Copy a pinned LTS runtime and npm from the official Node.js image.
+COPY --from=node-bin /usr/local/bin/node /usr/local/bin/node
+COPY --from=node-bin /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/npm
+
+RUN ln -sf ../lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm \
+    && ln -sf ../lib/node_modules/npm/bin/npx-cli.js /usr/local/bin/npx \
+    && node --version \
+    && npm --version
 
 # Persist the useful parts of `source env/activate` for normal docker run calls.
 ENV PATH=/opt/tt-mlir/build/bin:/opt/ttmlir-toolchain/bin:/opt/ttmlir-toolchain/venv/bin:/root/.tenstorrent-venv/bin:/opt/cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
