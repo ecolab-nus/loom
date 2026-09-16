@@ -330,6 +330,17 @@ if [ "$SKIP_TTKERNEL" = "0" ]; then
         -DTTMLIR_BUILD_DIR="$TTMLIR_BUILD_DIR"
 fi
 
+if [ -d /opt/loom/wheels ]; then
+    echo ""
+    echo "=== Installing the image's pinned TT-NN wheel ==="
+    TTNN_WHEELS=(/opt/loom/wheels/ttnn-*.whl)
+    [ "${#TTNN_WHEELS[@]}" -eq 1 ] && [ -f "${TTNN_WHEELS[0]}" ] \
+        || fail "Expected one TT-NN wheel in /opt/loom/wheels; rebuild the Tenstorrent image"
+    run_uv pip install --python "$REPO_ROOT/.venv/bin/python" \
+        "${TTNN_WHEELS[0]}"
+    run_uv run --project "$REPO_ROOT" --no-sync python -c 'import ttnn; print(ttnn.__file__)'
+fi
+
 echo ""
 echo "============================================"
 echo "  Loom Docker workspace install complete"
