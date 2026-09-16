@@ -76,6 +76,11 @@ The image supplies `uv`, LLVM/MLIR, tt-mlir, TT-Metal, and Rust.
 Project-specific Python packages are installed by the lifecycle command, not
 baked into the image.
 
+The workspace uses CPU-only PyTorch with Helion, Triton, and torch-mlir for
+CPU tensor tracing and MLIR lowering. It does not install the NVIDIA CUDA
+runtime packages required by CUDA-enabled PyTorch. Running or autotuning
+Helion kernels on NVIDIA GPUs requires a separate CUDA-enabled environment.
+
 ## 3. VS Code: Local Docker
 
 Clone the repository by any preferred method, including SSH. Ensure its
