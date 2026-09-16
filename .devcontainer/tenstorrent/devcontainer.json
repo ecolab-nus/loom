@@ -1,7 +1,11 @@
 {
   "$schema": "https://raw.githubusercontent.com/devcontainers/spec/main/schemas/devContainer.base.schema.json",
   "name": "Loom (Tenstorrent)",
-  "image": "ftod/loom_dev:latest",
+  "build": {
+    "dockerfile": "../../docker/Dockerfile",
+    "context": "../..",
+    "target": "tenstorrent"
+  },
   "remoteUser": "root",
   "updateRemoteUserUID": false,
   "init": true,

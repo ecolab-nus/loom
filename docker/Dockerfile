@@ -1,6 +1,8 @@
 # syntax=docker/dockerfile:1.7
 
 ARG BASE_IMAGE=ghcr.io/tenstorrent/tt-mlir/tt-mlir-ci-ubuntu-24-04:latest
+# Reuse the published compiler and its matching TT-Metal checkout for hardware builds.
+ARG LOOM_BASE_IMAGE=docker.io/ftod/loom_dev@sha256:0c117b6fdec0ed59b7aad02b9ea6390ac1d845849dd34dcc02f7dc3d299d3c77
 ARG UV_VERSION=0.11.32
 ARG NODE_VERSION=24.18.0
 
@@ -51,7 +53,7 @@ RUN source env/activate \
     && cmake --build build --parallel "${CMAKE_BUILD_PARALLEL_LEVEL}" \
     && test -x build/bin/ttmlir-opt
 
-FROM ${BASE_IMAGE} AS final
+FROM ${BASE_IMAGE} AS standard
 
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
@@ -162,3 +164,36 @@ WORKDIR /workspace
 EXPOSE 22
 ENTRYPOINT ["/usr/local/bin/loom-container-entrypoint"]
 CMD ["sleep", "infinity"]
+
+# Hardware runtime is only built for --target tenstorrent.
+FROM ${LOOM_BASE_IMAGE} AS tenstorrent
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+ARG CMAKE_BUILD_PARALLEL_LEVEL=8
+ENV LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:/opt/openmpi-v5.0.7-ulfm/lib
+
+# Build the Python 3.10 runtime used by Loom from the same pinned TT-Metal
+# checkout as the compiler. CMake downloads and verifies that revision's SFPI
+# into runtime/sfpi, which takes precedence over the base image's system SFPI.
+COPY docker/build-tt-metal.sh /tmp/build-tt-metal.sh
+# The pinned base can contain an older repository signing key. Refresh it
+# before apt verifies the current Tenstorrent package index.
+RUN curl --proto '=https' --tlsv1.2 -fsSL --retry 5 \
+      https://ppa.tenstorrent.com/tt-pkg-key.asc \
+      -o /etc/apt/keyrings/tt-pkg-key.asc \
+    && chmod 644 /etc/apt/keyrings/tt-pkg-key.asc \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends \
+      build-essential pkg-config libhwloc-dev libnuma-dev libboost-dev \
+      libtbb-dev libcapstone-dev \
+    && CMAKE_BUILD_PARALLEL_LEVEL="${CMAKE_BUILD_PARALLEL_LEVEL}" \
+      bash /tmp/build-tt-metal.sh \
+    && rm -f /tmp/build-tt-metal.sh \
+    && rm -rf /var/lib/apt/lists/*
+
+# Validate separately so the expensive runtime build remains cached.
+# Import the installed wheel outside the source tree; no device is needed.
+RUN cd /tmp \
+    && /opt/tt-metal-venv/bin/python -c 'import ttnn; print(ttnn.__file__)'
+
+# Keep an untargeted build compiler-only.
+FROM standard AS final

@@ -72,7 +72,12 @@ It has the following behavior:
 - keeps the image's `sleep infinity` command;
 - creates Loom's `.venv` and builds all workspace components after cloning.
 
-The image supplies `uv`, LLVM/MLIR, tt-mlir, TT-Metal, and Rust.
+The standard image supplies `uv`, LLVM/MLIR, tt-mlir, TT-Metal sources, and Rust.
+The Tenstorrent image additionally compiles the pinned TT-Metal checkout with
+Python 3.10 bindings and its matching SFPI compiler. It stores a TT-NN wheel in
+`/opt/loom/wheels`; `install-docker.sh` installs this wheel into the workspace's
+`.venv`, replacing any separately installed PyPI TT-NN and reusing an already
+installed matching wheel. The standard image does not build or install TT-NN.
 Project-specific Python packages are installed by the lifecycle command, not
 baked into the image.
 
@@ -348,6 +353,7 @@ Buildx is required only when rebuilding the image:
 ```bash
 docker buildx build \
   --file docker/Dockerfile \
+  --target standard \
   --load \
   --tag loom_dev:local \
   .
@@ -355,6 +361,49 @@ docker buildx build \
 
 Use `loom_dev:local` in a temporary local copy of `devcontainer.json` while
 testing a locally rebuilt image.
+
+For Tenstorrent hardware, build the separate runtime image. This target extends
+the published Loom image pinned by digest in `LOOM_BASE_IMAGE`, reuses its
+prebuilt tt-mlir, and compiles its existing matching TT-Metal checkout. It does
+not rebuild the standard image or tt-mlir. Before installing build dependencies,
+it refreshes the Tenstorrent APT signing key from the official repository so
+an older key in the pinned base does not cause `NO_PUBKEY` failures:
+
+```bash
+docker buildx build \
+  --file docker/Dockerfile \
+  --target tenstorrent \
+  --load \
+  --tag ftod/loom_dev:tenstorrent \
+  .
+```
+
+The Tenstorrent Dev Container configuration builds this target automatically
+when you select **Loom (Tenstorrent)** and reopen the checkout in a container.
+On a new machine, it pulls the pinned prebuilt Loom base and builds only the
+matching TT-Metal runtime; no manual image build or published
+`ftod/loom_dev:tenstorrent` tag is required. The first build takes time;
+subsequent builds reuse Docker's cache. The Docker host must already have the
+Tenstorrent driver, `/dev/tenstorrent`, `/dev/hugepages`, and
+`/dev/hugepages-1G` configured.
+
+Raw Docker users can use the manual build command above and select
+`ftod/loom_dev:tenstorrent` when creating their container.
+An untargeted build defaults to the standard image. Limit build memory usage
+with `--build-arg CMAKE_BUILD_PARALLEL_LEVEL=4` if needed. To select another
+prebuilt Loom image, pass `--build-arg LOOM_BASE_IMAGE=IMAGE_REFERENCE`; that
+image must include the compiled tt-mlir and its matching TT-Metal sources.
+
+After recreating the container, run `bash install-docker.sh` (automatic for
+Dev Containers), including when reusing a workspace volume. Do not install a
+separate PyPI `ttnn` wheel. The runtime uses the checkout's verified SFPI under
+`$TT_METAL_HOME/runtime/sfpi`, ahead of the system compiler supplied by the base
+image. NumPy is constrained to 1.x in the workspace lockfile to satisfy this
+TT-NN revision and prevent `uv run` from replacing it with NumPy 2.x.
+
+The image build checks the SFPI executable and imports the built TT-NN wheel
+without hardware. Device initialization and matmul still need validation on
+the Docker host's Tenstorrent devices.
 
 For an offline machine, create and transfer an archive:
 
