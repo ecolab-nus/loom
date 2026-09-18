@@ -41,6 +41,13 @@ assignments. The solver consumes resolved ETG constraints and timing
 expressions, searches finite symbol domains, and returns assignments for
 materialization.
 
+ETG capacity metadata is byte-valued and grouped by flat physical memory
+symbol. The solver enforces every memory budget together. Its single
+`is_double_buffer` decision adds a second copy of each memory's load allocation
+to that memory's demand; compute and store allocations remain single-buffered.
+Allocation element widths are accounted before aggregation, so mixed f16/f32
+storage does not share a global datatype multiplier.
+
 ## Compilation Pipeline
 
 | Stage | Name | Component | Description |

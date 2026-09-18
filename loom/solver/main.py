@@ -14,7 +14,7 @@ from ..loom_utils.modeling import (
 )
 from ..loom_utils.modeling import TIME_COST_SCALE, compute_total_time_ast
 from ..loom_utils.ast import (
-    build_l1_memory_constraint,
+    build_memory_constraints,
     Const,
     Div,
     parse_expr,
@@ -40,14 +40,15 @@ def solve_variant(
         parse_constraint(c)
         for c in variant["constraint_scope"]["hard_constraints"]
     ]
-    memory_constraints_ast = [
-        build_l1_memory_constraint(variant["constraint_scope"]["metadata"])
-    ]
+    memory_constraints_ast = build_memory_constraints(
+        variant["constraint_scope"]["metadata"]
+    )
     t_total_ast = compute_total_time_ast(variant, use_common_expr=True)
 
     # Add constraints and solve
     ctx.add_hard_constraints(hard_constraints_ast)
-    ctx.add_hard_constraints(memory_constraints_ast, label_prefix="memory_l1")
+    for memory, constraint in memory_constraints_ast:
+        ctx.add_hard_constraints([constraint], label_prefix=f"memory[{memory}]")
     seq_iter_exprs, seq_iter_labels, temp_iter_exprs, temp_iter_labels = (
         _collect_iter_num_constraints(
             variant["constraint_scope"]["metadata"]["iter_num"]

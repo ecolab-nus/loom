@@ -1,59 +1,64 @@
-"""Build solver-side memory constraints from ETG metadata."""
+"""Build solver-side capacity constraints from ETG memory metadata."""
 
 from __future__ import annotations
 
 from typing import Any
 
-from .core import Add, Const, Eq, IfElse, Le, Mul, Sym
+from .core import Add, Const, Le, Mul, Sym
 from .parser import parse_expr
 
 
-_DTYPE_BYTES = {
-    "f16": 2,
-    "bf16": 2,
-    "i16": 2,
-    "f32": 4,
-    "i32": 4,
-}
+def build_memory_constraints(metadata: dict[str, Any]) -> list[tuple[str, Le]]:
+    """Create one shared-double-buffer-aware constraint per physical memory."""
+    footprints = metadata.get("memory_footprints")
+    if not isinstance(footprints, list):
+        raise TypeError("metadata.memory_footprints must be a list")
 
+    constraints: list[tuple[str, Le]] = []
+    seen_memories: set[str] = set()
+    for index, footprint in enumerate(footprints):
+        path = f"metadata.memory_footprints[{index}]"
+        if not isinstance(footprint, dict):
+            raise TypeError(f"{path} must be an object")
 
-def build_l1_memory_constraint(metadata: dict[str, Any]) -> Le:
-    """Create the DB-aware L1 capacity constraint from L1 footprint metadata."""
-    footprint = metadata.get("L1_footprint")
-    if not isinstance(footprint, dict):
-        raise ValueError("metadata.L1_footprint must use the grouped object schema")
+        memory = footprint.get("memory")
+        if not isinstance(memory, str) or not memory:
+            raise ValueError(f"{path}.memory must be a non-empty string")
+        if memory in seen_memories:
+            raise ValueError(f"Duplicate memory footprint record: {memory!r}")
+        seen_memories.add(memory)
 
-    capacity = footprint.get("capacity")
-    if type(capacity) is not int:
-        raise ValueError("metadata.L1_footprint.capacity must be an int")
+        capacity = footprint.get("capacity_bytes")
+        if type(capacity) is not int or capacity <= 0:
+            raise ValueError(f"{path}.capacity_bytes must be a positive int")
 
-    for key in ("load", "compute", "store"):
-        if key not in footprint or not isinstance(footprint[key], list):
-            raise ValueError(f"metadata.L1_footprint.{key} must be a list")
+        parsed: dict[str, list] = {}
+        for key in ("load_bytes", "compute_bytes", "store_bytes"):
+            terms = footprint.get(key)
+            if not isinstance(terms, list):
+                raise TypeError(f"{path}.{key} must be a list")
+            parsed[key] = [parse_expr(term) for term in terms]
 
-    datatype = metadata.get("datatype")
-    if datatype not in _DTYPE_BYTES:
-        raise ValueError(f"Unsupported L1 footprint datatype: {datatype!r}")
+        load_terms = parsed["load_bytes"]
+        if load_terms and "is_double_buffer" not in metadata.get("booleans", []):
+            raise ValueError(
+                "metadata.booleans must contain 'is_double_buffer' when "
+                f"{path}.load_bytes is non-empty"
+            )
 
-    load_terms = [parse_expr(t) for t in footprint["load"]]
-    compute_terms = [parse_expr(t) for t in footprint["compute"]]
-    store_terms = [parse_expr(t) for t in footprint["store"]]
-
-    if load_terms and "is_double_buffer" not in metadata.get("booleans", []):
-        raise ValueError(
-            "metadata.booleans must contain 'is_double_buffer' when load "
-            "L1 footprint terms are present"
+        base_bytes = _sum_expr(
+            load_terms + parsed["compute_bytes"] + parsed["store_bytes"]
+        )
+        extra_load_bytes = (
+            Mul(Sym("is_double_buffer"), _sum_expr(load_terms))
+            if load_terms
+            else Const(0)
+        )
+        constraints.append(
+            (memory, Le(Add([base_bytes, extra_load_bytes]), Const(capacity)))
         )
 
-    base_terms = _sum_expr(load_terms + compute_terms + store_terms)
-    db_extra = (
-        IfElse(Eq(Sym("is_double_buffer"), Const(1)), _sum_expr(load_terms), Const(0))
-        if load_terms
-        else Const(0)
-    )
-    effective_terms = Add([base_terms, db_extra])
-    effective_bytes = Mul(effective_terms, Const(_DTYPE_BYTES[datatype]))
-    return Le(effective_bytes, Const(capacity))
+    return constraints
 
 
 def _sum_expr(terms):
