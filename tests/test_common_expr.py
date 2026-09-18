@@ -4,6 +4,7 @@ import cpmpy as cp
 
 from loom.loom_utils.ast import Add, CommonExpr, Const, Max, Mul, Sym
 from loom.loom_utils.modeling.aggregation import compute_total_time_ast
+from loom.solver.main import _parse_solver_time_cost
 from loom.solver.core.cpmpy_expr_resolver import ExprResolver
 
 
@@ -115,3 +116,23 @@ def test_aggregation_common_expr_preserves_approx_objective() -> None:
         for is_double_buffer in (0, 1):
             assignments = {"is_double_buffer": is_double_buffer}
             assert common.eval(assignments) == expanded.eval(assignments)
+
+
+def test_aggregation_accepts_mlar_expression_time_cost() -> None:
+    variant = _variant(load_cost=5, compute_cost=3)
+    scenario = (
+        variant["kernel_block"]["compute_scope"]["stages"][0]
+        ["for_loop_block"]["load_scope"]["stages"][0]
+        ["Parallel"][0]["Sequential"]["scenarios"][0]
+    )
+    scenario["time_cost"] = {"Expression": scenario["time_cost"]}
+
+    expr = compute_total_time_ast(variant, scale_time_costs=False)
+
+    assert expr.eval({"is_double_buffer": 0}) == 32
+
+
+def test_solver_reporter_accepts_mlar_expression_time_cost() -> None:
+    expr = _parse_solver_time_cost({"Expression": {"Const": 128}})
+
+    assert expr.eval({}) == 2

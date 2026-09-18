@@ -125,6 +125,8 @@ def _contains_symbol(expr: object, symbol: str) -> bool:
 
 
 def _parse_solver_time_cost(time_cost: object):
+    if isinstance(time_cost, dict) and set(time_cost) == {"Expression"}:
+        time_cost = time_cost["Expression"]
     return Div(parse_expr(time_cost), Const(TIME_COST_SCALE))
 
 

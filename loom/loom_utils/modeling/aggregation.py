@@ -165,6 +165,8 @@ def _fold_scenarios(scenarios: list[dict], scale_time_costs: bool) -> Expr:
 
 def _parse_time_cost(time_cost: object, scale_time_costs: bool) -> Expr:
     """Parse scenario time cost in solver units while leaving ETG data untouched."""
+    if isinstance(time_cost, dict) and set(time_cost) == {"Expression"}:
+        time_cost = time_cost["Expression"]
     parsed = parse_expr(time_cost)
     if not scale_time_costs:
         return parsed
