@@ -1,7 +1,7 @@
 [submodule "third_party/loom-dataflow"]
 	path = third_party/loom-dataflow
 	url = ../loom-dataflow.git
-	branch = main
+	branch = hetero-memory
 [submodule "third_party/helion-mlir"]
 	path = third_party/helion-mlir
 	url = ../helion-mlir.git
@@ -9,7 +9,7 @@
 [submodule "third_party/loom-mlar"]
 	path = third_party/loom-mlar
 	url = ../loom-mlar.git
-	branch = main
+	branch = architecture-model-redesign
 [submodule "third_party/loom2ttkernel"]
 	path = third_party/loom2ttkernel
 	url = ../loom2ttkernel.git
