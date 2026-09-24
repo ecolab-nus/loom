@@ -60,8 +60,8 @@ storage does not share a global datatype multiplier.
 | 5 | Optional TT Lowering | `loom2ttkernel` | Lowers bufferized Loom MLIR toward TTKernel code generation. |
 
 When `assigned_block_size` is provided, the root pipeline bypasses Stage 3 and
-sends those values directly to materialization. In debug mode, Loom can still
-generate and resolve ETG data to produce manual latency breakdowns.
+resolves Stage 2 to validate those values before materialization. Invalid
+variants are removed, and debug mode also writes manual latency breakdowns.
 
 ## Subproject Notes
 

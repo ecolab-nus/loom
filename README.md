@@ -98,6 +98,14 @@ uv run python kernels/matmul.py \
 See the [usage guide](docs/usage.md) for kernel configuration, writing new
 kernels, and generated outputs.
 
+Pass `--enumerate-bindings` to enumerate compatible processor/memory bindings
+for each static operation before ordinary spatial and schedule exploration.
+Use `--explicit-memory` separately only when the kernel input is already a
+stage-02 template.
+
+Set `LOOM_TARGET=tt` for TT-specific storage layout accounting and
+materialization passes. The default target is generic.
+
 Optionally, generate Tenstorrent kernel code:
 
 ```bash

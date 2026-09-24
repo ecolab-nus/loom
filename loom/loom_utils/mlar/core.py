@@ -58,14 +58,15 @@ def evaluate_schedule(
 
 
 def _fill_func_scenarios(schedules, *, evaluator_path=None):
-    """Fill empty Func-level scenarios inside *schedules*."""
+    """Fill empty function-level scenarios inside *schedules*."""
     filled = []
     for sched in schedules:
-        if "Func" in sched and not sched["Func"].get("scenarios"):
+        kind = next((name for name in ("Func", "PlacedFunc") if name in sched), None)
+        if kind and not sched[kind].get("scenarios"):
             wrapper = {"Sequential": {"schedules": [sched], "scenarios": []}}
             full_result = evaluate_schedule(wrapper, evaluator_path=evaluator_path)
             func_scenarios = full_result["Sequential"].get("scenarios", [])
-            filled.append({"Func": {**sched["Func"], "scenarios": func_scenarios}})
+            filled.append({kind: {**sched[kind], "scenarios": func_scenarios}})
         else:
             filled.append(sched)
     return filled

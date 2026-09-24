@@ -60,3 +60,16 @@ def test_func_breakdown_keeps_unknown_cost_at_front() -> None:
     lines = _render(_sequential(("arith.mulf(%1, %2)", [])))
 
     assert lines == ["           ? solver units  arith.mulf(%1, %2)"]
+
+
+def test_func_breakdown_prints_placed_functions() -> None:
+    sequential = _sequential(("linalg.matmul(%0, %1, %2)", [_scenario(9)]))
+    schedule = sequential["schedules"][0]
+    schedule["PlacedFunc"] = {
+        **schedule.pop("Func"),
+        "target": {"array": "matrix_sram", "selectors": []},
+    }
+
+    assert _render(sequential) == [
+        "           9 solver units  linalg.matmul(%0, %1, %2)"
+    ]

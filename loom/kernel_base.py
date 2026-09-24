@@ -40,7 +40,8 @@ CLI produced (inherited from LoomKernel)
 
     # Recommended: load paths from a config file
     python kernels/matmul.py --config kernels/config.json [--njobs N] [--debug] \
-        [--topk-candidates K] [--topk-block-size K]
+        [--topk-candidates K] [--topk-block-size K] \
+        [--explicit-memory] [--enumerate-bindings]
 
     # Or pass paths directly on the command line
     python kernels/matmul.py \
@@ -225,6 +226,16 @@ class LoomKernel:
             metavar="K",
             help="Materialize K local block-size samples per symbol around each selected candidate.",
         )
+        parser.add_argument(
+            "--explicit-memory",
+            action="store_true",
+            help="Treat generated MLIR as an explicit-memory stage-02 template.",
+        )
+        parser.add_argument(
+            "--enumerate-bindings",
+            action="store_true",
+            help="Enumerate compatible processor/memory bindings per static operation.",
+        )
         return parser
 
     @classmethod
@@ -256,7 +267,12 @@ class LoomKernel:
         hw_spec = args.hw_spec or config_data.get("hw_spec") or config_data.get("df_mlir")
         block_sizes = config_data.get("block_sizes")
         assigned_block_size = config_data.get("assigned_block_size")
-
+        explicit_memory = args.explicit_memory or bool(
+            config_data.get("explicit_memory", False)
+        )
+        enumerate_bindings = args.enumerate_bindings or bool(
+            config_data.get("enumerate_bindings", False)
+        )
         # Required parameter check
         missing = []
         if not output_path:
@@ -298,6 +314,8 @@ class LoomKernel:
             assigned_block_size=assigned_block_size if has_assigned_block_size else None,
             topk_candidates=args.topk_candidates,
             topk_block_size=args.topk_block_size,
+            explicit_memory=explicit_memory,
+            enumerate_bindings=enumerate_bindings,
         )
 
 

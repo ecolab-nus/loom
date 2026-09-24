@@ -41,7 +41,9 @@ optional solver controls:
 ```
 
 Use `assigned_block_size` to bypass the solver and materialize explicit
-assignments:
+assignments. Loom still resolves the ETG and rejects each assignment that
+violates a symbol domain, loop extent, hard constraint, or memory capacity.
+Valid variants continue; the run fails if none remain.
 
 ```json
 {
@@ -52,6 +54,50 @@ assignments:
   }
 }
 ```
+
+## Automatic Processor Bindings
+
+Enable automatic processor/memory binding directly on a Helion kernel with:
+
+```bash
+uv run python kernels/matmul.py \
+  --config kernels/config_files/matmul.json \
+  --enumerate-bindings
+```
+
+The equivalent config field is `"enumerate_bindings": true`.
+`"explicit_memory": true` only means the input is already a stage-02 template;
+it is not required for enumeration.
+
+Binding also runs when enumeration is off: Loom chooses the last matching
+registered processor implementation and fails if that fixed assignment or its
+direct movers are infeasible; it does not fall back to an earlier registration.
+Fixed mode preserves the ordinary spatial/broadcast candidate names. With
+enumeration on, Loom explores legal combinations and adds deterministic binding
+and mover suffixes. Each primitive in a fused `linalg.generic`
+body is a binding site; the generic remains fused in IR. Unannotated residency
+is inferred, while explicit annotations, including kind zero, constrain the
+choice. For authored stage-02 memrefs, write
+`loom.explicit_local_mem_kind = 0 : i64` on `loom.alloc` when kind zero must be
+distinguished from an omitted annotation.
+
+Loom rewrites internal allocations and supported aliases, then selects only
+declared direct movers for transfers already present in the computation. A
+binding that would need an implicit transfer is rejected even when a mover
+exists. It does not synthesize routes or split shared allocations.
+
+The solver writes `constraints/solver_results.json` containing every binding
+group, every variant status and cost, the best feasible result per group, and
+the overall best. Materialized IR preserves the selected compute and mover
+identities.
+
+Set `LOOM_TARGET=tt` to enable TT-specific storage accounting and
+materialization rewrites. An unset or empty variable selects the generic
+target; other values are rejected. The selected target is recorded as
+`loom.target` in MLIR and in each ETG variant. Generic accounting uses dense
+allocation bytes. TT accounting additionally enforces the bottom-two-dimension
+rules, pads a static size-one storage dimension to 32 elements, and includes
+reduction configuration storage.
 
 ## Writing a Kernel
 

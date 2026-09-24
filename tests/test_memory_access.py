@@ -25,17 +25,22 @@ def _func(
     *,
     read: str | None = None,
     write: str | None = None,
+    placed: bool = False,
 ) -> dict:
     func = {"op_label": label}
     if read is not None:
         func["read"] = read
     if write is not None:
         func["write"] = write
+    kind = "PlacedFunc" if placed else "Func"
+    node = {"func": func}
+    if placed:
+        node["target"] = {"array": "lane", "selectors": []}
     return {
         "Parallel": [
             {
                 "Sequential": {
-                    "schedules": [{"Func": {"func": func}}],
+                    "schedules": [{kind: node}],
                 }
             }
         ]
@@ -129,6 +134,19 @@ def test_summary_handles_old_etg_and_empty_fields() -> None:
     assert format_memory_access_summary([]) == [
         "Memory Access Summary",
         "  (no memory access metadata)",
+    ]
+
+
+def test_summary_walks_placed_functions() -> None:
+    variant = {
+        "kernel_block": _block(
+            [_func("placed", read="%0: 2", write="%1: 3", placed=True)]
+        )
+    }
+
+    assert summarize_memory_accesses(variant, {}) == [
+        MemoryAccessSummary(2, "read", "placed", 1),
+        MemoryAccessSummary(3, "write", "placed", 1),
     ]
 
 

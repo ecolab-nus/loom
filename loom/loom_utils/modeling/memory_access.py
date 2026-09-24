@@ -57,7 +57,11 @@ def _walk_stage(
     for parallel_item in stage.get("Parallel", []):
         sequential = parallel_item.get("Sequential", {})
         for schedule in sequential.get("schedules", []):
-            func_node = schedule.get("Func") if isinstance(schedule, dict) else None
+            func_node = (
+                schedule.get("Func") or schedule.get("PlacedFunc")
+                if isinstance(schedule, dict)
+                else None
+            )
             if not func_node:
                 continue
             func = func_node.get("func")

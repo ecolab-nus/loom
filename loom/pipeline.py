@@ -18,8 +18,7 @@ Pipeline stages
   4. Materialization    – C++ passes via pybind11 (loom_pipeline)
 
 When ``assigned_block_size`` is provided (non-empty), solving is bypassed.
-ETG generation/resolution is still run in debug mode so manual latency
-breakdowns can be written to ``solver.log``.
+ETG generation/resolution still runs to validate manual assignments.
 
 Output layout under <output_path>
 ----------------------------------
@@ -28,6 +27,7 @@ Output layout under <output_path>
   IRs/p03_bufferized.mlir
   constraints/p01_exploration_etg.json
   constraints/p02_resolved_etg.json
+  constraints/solver_results.json
   constraints/solver.log              (--debug only)
 """
 from __future__ import annotations
@@ -88,6 +88,8 @@ def run_step_1_exploration(
     constraints_dir: Path,
     debug: bool,
     skip_etg: bool = False,
+    explicit_memory: bool = False,
+    enumerate_bindings: bool = False,
 ) -> tuple[str, str]:
     """Step 1: Exploration pipeline (stages 0→5) via pybind11.
 
@@ -117,6 +119,8 @@ def run_step_1_exploration(
             hw_spec_file=hw_spec,
             produce_etg=True,
             skip_etg=skip_etg,
+            explicit_memory=explicit_memory,
+            enumerate_bindings=enumerate_bindings,
             # spatial_reuse=False
         )
         if not skip_etg:
@@ -184,6 +188,7 @@ def run_step_3_solve(
             input_path=resolved_etg_path,
             njobs=njobs,
             output_path=solver_log,
+            results_path=constraints_dir / "solver_results.json",
             symbol_domains=symbol_domains,
             topk_candidates=topk_candidates,
             topk_block_size=topk_block_size,
@@ -203,6 +208,7 @@ def run_step_4_materialization(
     explored_mlir: str,
     block_sizes: dict[str, Any],
     ir_dir: Path,
+    hw_spec: str,
 ) -> None:
     """Step 4: Materialization pipeline (stages 5→7) via pybind11."""
     logging.info("")
@@ -223,6 +229,7 @@ def run_step_4_materialization(
         final_mlir = run_materialization(
             input_mlir=explored_mlir,
             block_sizes_json=json.dumps(materialization_input),
+            hw_spec_file=hw_spec,
         )
         p03.write_text(final_mlir)
 
@@ -244,6 +251,8 @@ def run_pipeline(
     assigned_block_size: dict[str, Any] | None = None,
     topk_candidates: int | None = None,
     topk_block_size: int = 1,
+    explicit_memory: bool = False,
+    enumerate_bindings: bool = False,
 ) -> None:
     """Run the full Loom compilation pipeline.
 
@@ -268,13 +277,18 @@ def run_pipeline(
     assigned_block_size:
         Optional explicit block-size assignments to use directly for
         materialization. When provided as a non-empty dict, Step 3 is skipped.
-        Step 2 also runs in debug mode to support manual latency reporting.
+        Step 2 validates assignments against each variant's constraints.
     topk_candidates:
         Optional positive integer limiting materialization to the top K
         candidates by optimal time.
     topk_block_size:
         Optional positive odd integer controlling 32-step neighbor sampling
         around each solver-selected block-size assignment.
+    explicit_memory:
+        Treat frontend output as a stage-02 explicit-memory template.
+    enumerate_bindings:
+        Enumerate semantically compatible processor arrays independently at
+        each static compute operation before spatial exploration.
     """
     output_path = Path(output_path)
     ir_dir = output_path / "IRs"
@@ -286,48 +300,39 @@ def run_pipeline(
     mlir_text = run_step_0_frontend(generate_mlir_fn, ir_dir, debug)
 
     has_assigned_block_size = bool(assigned_block_size)
-    needs_manual_etg = (
-        has_assigned_block_size
-        and (debug or "ALL" in assigned_block_size)
-    )
-
     # Step 1: Exploration
     explored_mlir, etg_json_text = run_step_1_exploration(
         mlir_text, str(hw_spec), ir_dir, constraints_dir, debug,
-        skip_etg=has_assigned_block_size and not needs_manual_etg,
+        skip_etg=False,
+        explicit_memory=explicit_memory,
+        enumerate_bindings=enumerate_bindings,
     )
     del mlir_text
 
     if has_assigned_block_size:
-        if needs_manual_etg:
-            resolved_variants = run_step_2_etg_resolution(
-                etg_json_text, njobs, constraints_dir
-            )
-            from loom.solver import (  # noqa: PLC0415
-                prepare_manual_block_sizes,
-                write_manual_breakdown_log,
-            )
+        resolved_variants = run_step_2_etg_resolution(
+            etg_json_text, njobs, constraints_dir
+        )
+        from loom.solver import (  # noqa: PLC0415
+            prepare_manual_block_sizes,
+            write_manual_breakdown_log,
+        )
 
-            if debug:
-                solver_log = constraints_dir / "solver.log"
-                block_size = write_manual_breakdown_log(
-                    resolved_variants,
-                    assigned_block_size,
-                    solver_log,
-                )
-                logging.info(f"Manual latency breakdown written to: {solver_log}")
-            else:
-                block_size = prepare_manual_block_sizes(
-                    resolved_variants,
-                    assigned_block_size,
-                )
+        if debug:
+            solver_log = constraints_dir / "solver.log"
+            block_size = write_manual_breakdown_log(
+                resolved_variants,
+                assigned_block_size,
+                solver_log,
+                symbol_domains=symbol_domains,
+            )
+            logging.info(f"Manual latency breakdown written to: {solver_log}")
         else:
-            logging.info("")
-            logging.info("=" * 72)
-            logging.info("STEP 2: ETG RESOLUTION (MLAR evaluator)")
-            logging.info("=" * 72)
-            logging.info("Skipped due to assigned_block_size override.")
-            block_size = assigned_block_size
+            block_size = prepare_manual_block_sizes(
+                resolved_variants,
+                assigned_block_size,
+                symbol_domains=symbol_domains,
+            )
 
         logging.info("")
         logging.info("=" * 72)
@@ -350,7 +355,7 @@ def run_pipeline(
     del etg_json_text
 
     # Step 4: Materialization
-    run_step_4_materialization(explored_mlir, block_size, ir_dir)
+    run_step_4_materialization(explored_mlir, block_size, ir_dir, str(hw_spec))
     del explored_mlir
 
     if debug:

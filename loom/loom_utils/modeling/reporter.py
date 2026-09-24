@@ -226,7 +226,11 @@ def _print_func_breakdown(
     """Print Func-level timing for the schedules inside one Sequential branch."""
     indent = "  " * depth
     for schedule in sequential.get("schedules", []):
-        func_node = schedule.get("Func") if isinstance(schedule, dict) else None
+        func_node = (
+            schedule.get("Func") or schedule.get("PlacedFunc")
+            if isinstance(schedule, dict)
+            else None
+        )
         if not func_node:
             continue
 

@@ -1,6 +1,9 @@
 """CPMpy-based block-size optimizer for Loom using Pure Python AST."""
 
 import argparse
+import json
+import logging
+import re
 import sys
 from itertools import product
 from concurrent.futures import ProcessPoolExecutor, as_completed
@@ -134,8 +137,9 @@ def _parse_solver_time_cost(time_cost: object):
 def prepare_manual_block_sizes(
     variants: list[dict],
     assigned_block_size: dict[str, Any],
+    symbol_domains: dict[str, list[int]] | None = None,
 ) -> dict[str, Any]:
-    """Expand and validate manually assigned block sizes by variant name."""
+    """Expand manual assignments and retain only feasible variants."""
     if not assigned_block_size:
         raise ValueError("assigned_block_size must be a non-empty object")
 
@@ -150,30 +154,69 @@ def prepare_manual_block_sizes(
     variant_names = [get_variant_name(variant, i) for i, variant in enumerate(variants)]
     if "ALL" in assigned_block_size:
         assignment = normalized["ALL"]
-        return {name: _copy_manual_assignment_value(assignment) for name in variant_names}
+        expanded = {
+            name: _copy_manual_assignment_value(assignment)
+            for name in variant_names
+        }
+    else:
+        unknown = sorted(set(assigned_block_size) - set(variant_names))
+        if unknown:
+            available = ", ".join(variant_names[:5])
+            suffix = "..." if len(variant_names) > 5 else ""
+            raise ValueError(
+                "Unknown assigned_block_size candidate(s): "
+                f"{', '.join(unknown)}. Available candidates include: "
+                f"{available}{suffix}"
+            )
+        expanded = {
+            name: _copy_manual_assignment_value(assignment)
+            for name, assignment in normalized.items()
+        }
 
-    unknown = sorted(set(assigned_block_size) - set(variant_names))
-    if unknown:
-        available = ", ".join(variant_names[:5])
-        suffix = "..." if len(variant_names) > 5 else ""
+    domains = {**derive_domains_from_etg(variants), **(symbol_domains or {})}
+    accepted: dict[str, Any] = {}
+    rejections: list[str] = []
+    for index, variant in enumerate(variants):
+        name = variant_names[index]
+        assignment = expanded.get(name)
+        if assignment is None:
+            continue
+        valid = []
+        for combo in _iter_manual_assignment_combos(assignment):
+            try:
+                completed = _complete_manual_assignment(variant, combo, name)
+            except ValueError as exc:
+                rejections.append(f"{name}: {exc}")
+                continue
+            reason = _manual_infeasibility(variant, completed, domains)
+            if reason is None:
+                valid.append(completed)
+            else:
+                rejections.append(f"{name}: {reason}")
+        if valid:
+            accepted[name] = valid if isinstance(assignment, list) else valid[0]
+
+    for rejection in rejections:
+        logging.warning("Rejected manual block-size assignment for %s", rejection)
+    if not accepted:
+        detail = "; ".join(rejections[:4])
         raise ValueError(
-            "Unknown assigned_block_size candidate(s): "
-            f"{', '.join(unknown)}. Available candidates include: {available}{suffix}"
+            "No feasible assigned_block_size variants remain"
+            + (f": {detail}" if detail else "")
         )
-
-    return {
-        name: _copy_manual_assignment_value(assignment)
-        for name, assignment in normalized.items()
-    }
+    return accepted
 
 
 def write_manual_breakdown_log(
     variants: list[dict],
     assigned_block_size: dict[str, Any],
     output_path: Path | str,
+    symbol_domains: dict[str, list[int]] | None = None,
 ) -> dict[str, Any]:
     """Write reporter breakdowns for manual assignments without running the solver."""
-    block_sizes = prepare_manual_block_sizes(variants, assigned_block_size)
+    block_sizes = prepare_manual_block_sizes(
+        variants, assigned_block_size, symbol_domains=symbol_domains
+    )
     total = len(variants)
 
     with open(output_path, "w", encoding="utf-8") as log:
@@ -244,9 +287,15 @@ def _complete_manual_assignment(
     metadata = variant.get("constraint_scope", {}).get("metadata", {})
     required_symbols = set(metadata.get("symbols", {}))
     boolean_symbols = set(metadata.get("booleans", []))
+    known_symbols = required_symbols | boolean_symbols
     completed: dict[str, int] = {}
 
     for sym, value in assignment.items():
+        if sym not in known_symbols:
+            raise ValueError(
+                f"assigned_block_size['{variant_name}'] contains unknown "
+                f"symbol: {sym}"
+            )
         if not isinstance(value, int):
             raise ValueError(
                 f"assigned_block_size['{variant_name}']['{sym}'] must be an integer"
@@ -268,6 +317,52 @@ def _complete_manual_assignment(
             )
 
     return completed
+
+
+def _manual_infeasibility(
+    variant: dict,
+    assignment: dict[str, int],
+    domains: dict[str, list[int]],
+) -> str | None:
+    scope = variant["constraint_scope"]
+    metadata = scope["metadata"]
+    for sym, info in metadata.get("symbols", {}).items():
+        value = assignment[sym]
+        if sym in domains:
+            if value not in domains[sym]:
+                return f"{sym}={value} is outside its allowed domain"
+        else:
+            upper = info.get("natural_ub", 10000) if isinstance(info, dict) else 10000
+            if value < 1 or value > upper:
+                return f"{sym}={value} is outside [1, {upper}]"
+
+    for index, raw in enumerate(scope.get("hard_constraints", [])):
+        if not parse_constraint(raw).eval(assignment):
+            return f"hard constraint {index} is false"
+    for memory, constraint in build_memory_constraints(metadata):
+        if not constraint.eval(assignment):
+            return f"capacity of memory '{memory}' is exceeded"
+
+    seq_exprs, seq_labels, temp_exprs, temp_labels = (
+        _collect_iter_num_constraints(metadata["iter_num"])
+    )
+    for raw, label, divisible in [
+        *((raw, label, True) for raw, label in zip(seq_exprs, seq_labels)),
+        *((raw, label, False) for raw, label in zip(temp_exprs, temp_labels)),
+    ]:
+        node = parse_expr(raw)
+        if not isinstance(node, Div):
+            raise ValueError(f"Expected top-level Div node in {label}")
+        numerator, denominators = SolverContext._flatten_div_chain(node)
+        numerator_value = numerator.eval(assignment)
+        denominator_value = 1
+        for denominator in denominators:
+            denominator_value *= denominator.eval(assignment)
+        if denominator_value <= 0 or denominator_value > numerator_value:
+            return f"{label} exceeds its iteration extent"
+        if divisible and numerator_value % denominator_value:
+            return f"{label} does not divide its iteration extent"
+    return None
 
 
 def sample_block_size_neighbors(
@@ -353,6 +448,7 @@ def run(
     input_path: Path | str,
     njobs: int = 1,
     output_path: Path | str | None = None,
+    results_path: Path | str | None = None,
     symbol_domains: dict[str, list[int]] | None = None,
     topk_candidates: int | None = None,
     topk_block_size: int = 1,
@@ -438,6 +534,37 @@ def run(
             total,
             debug=debug,
         )
+
+    if results_path:
+        grouped: dict[str, list[dict]] = {}
+        for result in results:
+            name = get_variant_name(result["variant"], result["index"])
+            match = re.match(r"^(.*?__binding_\d+)(?:__|$)", name)
+            group = match.group(1) if match else name
+            grouped.setdefault(group, []).append(result)
+
+        def summary(result: dict) -> dict:
+            return {
+                "variant": get_variant_name(result["variant"], result["index"]),
+                "status": result["status"],
+                "cost": result["min_val"],
+                "assignments": result["assignments"],
+            }
+
+        groups = []
+        for name, group_results in grouped.items():
+            optimal = _rank_optimal_results(group_results)
+            groups.append({
+                "binding": name,
+                "best": summary(optimal[0]) if optimal else None,
+                "variants": [summary(result) for result in group_results],
+            })
+        report = {
+            "complete": True,
+            "binding_groups": groups,
+            "overall_best": summary(best) if best else None,
+        }
+        Path(results_path).write_text(json.dumps(report, indent=2) + "\n")
 
     if best:
         print("\nGLOBAL BEST")
