@@ -9,6 +9,7 @@ requires-python = ">=3.10,<3.11"
 dependencies = [
     "cpmpy",
     # The pinned TT-NN runtime requires NumPy 1.x. Keep uv run from replacing it.
+    "ipython>=8.39.0",
     "numpy>=1.24.4,<2",
 ]
 

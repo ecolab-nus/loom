@@ -89,8 +89,8 @@ def _mamba_chunk_scan(
         [chunk_size, headdim, nchunks],
         block_size=[block_m, block_n, 1],
     ):
-        for tile_b in hl.tile(batch):
-            for tile_h in hl.tile(nheads):
+        for tile_b in hl.tile(batch, block_size=1):
+            for tile_h in hl.tile(nheads, block_size=1):
                 # tile_h: head tile (size 1)
                 # tile_m: chunk-local sequence rows (M axis)
                 # tile_n: head-dim columns (N axis)
