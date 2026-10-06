@@ -16,6 +16,7 @@
 #
 # Environment:
 #   LOOM_EVAL_SYSTEM    Path to a prebuilt eval_system binary
+#   LOOM_ARCH           Default architecture (wormhole|blackhole, default wormhole)
 
 set -euo pipefail
 
@@ -190,8 +191,9 @@ clean_workspace() {
         directory "${GENERATED_DIRECTORY_NAMES[@]}"
     clean_generated_paths \
         file "${GENERATED_FILE_NAMES[@]}"
-    clean_ignored_children \
-        "$REPO_ROOT/third_party/loom-mlar/tests/2d_mesh/bin"
+    for arch_bin in "$REPO_ROOT"/third_party/loom-mlar/tests/*/bin; do
+        clean_ignored_children "$arch_bin"
+    done
 
     remove_generated_path "$REPO_ROOT/test"
 
@@ -362,7 +364,7 @@ if [ "$SKIP_DATAFLOW" = "0" ]; then
     check_import loom_pipeline
 fi
 
-EVAL_BIN="${LOOM_EVAL_SYSTEM:-$REPO_ROOT/third_party/loom-mlar/tests/2d_mesh/bin/eval_system}"
+EVAL_BIN="${LOOM_EVAL_SYSTEM:-$REPO_ROOT/third_party/loom-mlar/tests/${LOOM_ARCH:-wormhole}/bin/eval_system}"
 if [ "$SKIP_MLAR" = "0" ]; then
     [ -x "$EVAL_BIN" ] || fail "loom-mlar evaluator was not produced"
     printf "  %-18s %s\n" "eval_system" "OK"

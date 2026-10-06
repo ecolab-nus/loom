@@ -38,7 +38,7 @@ def main() -> None:
         "--evaluator",
         default=None,
         metavar="PATH",
-        help="Path to the evaluator binary (default: built-in eval_core).",
+        help="Path to the evaluator binary (default: $LOOM_EVAL_SYSTEM, else loom-mlar/tests/$LOOM_ARCH/bin/eval_system).",
     )
     parser.add_argument(
         "--in-place",

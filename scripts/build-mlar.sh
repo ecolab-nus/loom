@@ -1,15 +1,18 @@
 #!/bin/bash
-# Build the loom-mlar eval_system evaluator binary.
+# Build the loom-mlar eval_system evaluator binaries.
 #
-# The architecture definition currently lives in test code, so we invoke
-# `cargo test` to trigger the binary generation.  A future refactor should
-# move the architecture to src/ and create a proper [[bin]] target.
+# Each architecture lives in third_party/loom-mlar/tests/<arch>/ (arch.rs plus
+# processors/*.mlir and *.perf.yaml).  The architecture definition currently
+# lives in test code, so we invoke `cargo test --test <arch>` to export the
+# hardware spec and generate the evaluator binary.
 #
 # Usage:
-#   bash scripts/build-mlar.sh
+#   bash scripts/build-mlar.sh                 # all architectures
+#   bash scripts/build-mlar.sh blackhole       # selected architectures
 #
-# Output:
-#   third_party/loom-mlar/tests/2d_mesh/bin/eval_system
+# Output (per arch):
+#   third_party/loom-mlar/tests/<arch>/2d_mesh_torus.mlir   (hw_spec)
+#   third_party/loom-mlar/tests/<arch>/bin/eval_system
 
 set -euo pipefail
 
@@ -27,19 +30,30 @@ if ! command -v cargo &>/dev/null; then
     exit 1
 fi
 
-echo "Building eval_system binary (this may take a while on first run)..."
-cd "$MLAR_DIR"
-
-# Run the specific test that generates the evaluator binary.
-cargo test --test 2d_mesh test_generate_system_evaluator_binary --release -- --nocapture
-
-# Verify the binary was produced.
-GENERATED="$MLAR_DIR/tests/2d_mesh/bin/eval_system"
-if [ ! -x "$GENERATED" ]; then
-    echo "ERROR: eval_system binary was not generated at $GENERATED"
-    exit 1
+ARCHS=("$@")
+if [ ${#ARCHS[@]} -eq 0 ]; then
+    ARCHS=(wormhole blackhole)
 fi
 
-echo ""
-echo "eval_system binary built successfully:"
-echo "  $GENERATED"
+cd "$MLAR_DIR"
+
+for ARCH in "${ARCHS[@]}"; do
+    if [ ! -f "$MLAR_DIR/tests/$ARCH/main.rs" ]; then
+        echo "ERROR: unknown architecture '$ARCH' (no tests/$ARCH/main.rs)"
+        exit 1
+    fi
+
+    echo "Building $ARCH hw_spec + eval_system (this may take a while on first run)..."
+    cargo test --test "$ARCH" --release -- --nocapture \
+        test_export_2d_mesh_torus_mlir test_generate_system_evaluator_binary
+
+    GENERATED="$MLAR_DIR/tests/$ARCH/bin/eval_system"
+    if [ ! -x "$GENERATED" ]; then
+        echo "ERROR: eval_system binary was not generated at $GENERATED"
+        exit 1
+    fi
+
+    echo ""
+    echo "$ARCH eval_system built successfully:"
+    echo "  $GENERATED"
+done

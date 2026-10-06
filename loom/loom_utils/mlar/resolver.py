@@ -19,20 +19,21 @@ def validate_scenarios(node, path: str = "") -> list[str]:
     return issues
 
 
-def _resolve_single_variant(variant: dict) -> dict:
-    return resolve_schedule(copy.deepcopy(variant))
+def _resolve_single_variant(variant: dict, evaluator_path=None) -> dict:
+    return resolve_schedule(copy.deepcopy(variant), evaluator_path)
 
 
 def resolve_etg_variants(
     variants: list[dict],
     njobs: int = 1,
+    evaluator_path=None,
 ) -> list[dict]:
     total = len(variants)
     results: list[dict | None] = [None] * total
 
     with ThreadPoolExecutor(max_workers=njobs) as executor:
         future_to_idx = {
-            executor.submit(_resolve_single_variant, v): i
+            executor.submit(_resolve_single_variant, v, evaluator_path): i
             for i, v in enumerate(variants)
         }
         for future in as_completed(future_to_idx):

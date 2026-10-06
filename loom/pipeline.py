@@ -132,22 +132,29 @@ def run_step_2_etg_resolution(
     etg_json_text: str,
     njobs: int,
     constraints_dir: Path,
+    hw_spec: str | Path | None = None,
 ) -> list[dict[str, Any]]:
-    """Step 2: ETG resolution via MLAR Rust evaluator."""
+    """Step 2: ETG resolution via MLAR Rust evaluator.
+
+    The evaluator is the ``eval_system`` generated next to *hw_spec*, so the
+    cost model always matches the hardware description.
+    """
     logging.info("")
     logging.info("=" * 72)
     logging.info("STEP 2: ETG RESOLUTION (MLAR evaluator)")
     logging.info("=" * 72)
 
-    from loom.loom_utils.mlar import resolve_etg_variants  # noqa: PLC0415
+    from loom.loom_utils.mlar import find_evaluator, resolve_etg_variants  # noqa: PLC0415
     from loom.loom_utils.io import smart_json_dumps  # noqa: PLC0415
 
     resolved_etg = constraints_dir / "p02_resolved_etg.json"
+    evaluator = find_evaluator(hw_spec)
+    logging.info(f"  Evaluator : {evaluator}")
     logging.info(f"  Output : {resolved_etg}")
 
     with pipeline_timer("Step 2: ETG Resolution"):
         variants = json.loads(etg_json_text)
-        resolved_variants = resolve_etg_variants(variants, njobs=njobs)
+        resolved_variants = resolve_etg_variants(variants, njobs=njobs, evaluator_path=evaluator)
         resolved_etg.write_text(smart_json_dumps(resolved_variants))
 
     logging.info(f"ETG resolution complete. {len(resolved_variants)} variant(s) resolved.")
@@ -301,7 +308,7 @@ def run_pipeline(
     if has_assigned_block_size:
         if needs_manual_etg:
             resolved_variants = run_step_2_etg_resolution(
-                etg_json_text, njobs, constraints_dir
+                etg_json_text, njobs, constraints_dir, hw_spec
             )
             from loom.solver import (  # noqa: PLC0415
                 prepare_manual_block_sizes,
@@ -336,7 +343,7 @@ def run_pipeline(
         logging.info("Skipped due to assigned_block_size override.")
     else:
         # Step 2: ETG resolution
-        run_step_2_etg_resolution(etg_json_text, njobs, constraints_dir)
+        run_step_2_etg_resolution(etg_json_text, njobs, constraints_dir, hw_spec)
 
         # Step 3: Solver
         resolved_etg_path = constraints_dir / "p02_resolved_etg.json"

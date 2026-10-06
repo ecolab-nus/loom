@@ -246,6 +246,7 @@ Options:
 
 Environment:
   LOOM_EVAL_SYSTEM    Path to a prebuilt eval_system binary
+  LOOM_ARCH           Default architecture (wormhole|blackhole, default wormhole)
 ```
 
 The installer builds the standalone ADL dialect first and supplies its CMake
