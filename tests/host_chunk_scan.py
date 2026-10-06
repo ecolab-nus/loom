@@ -22,7 +22,67 @@ _bootstrap_tt_metal_home()
 
 import torch
 import ttnn
-from models.common.utility_functions import profiler
+### Profiling ###
+class Profiler:
+    def __init__(self):
+        self.start_times = dict()
+        self.times = dict()
+        self.disabled = False
+
+    def clear(self):
+        self.start_times = dict()
+        self.times = dict()
+        self.disabled = False
+
+    def enable(self):
+        self.disabled = False
+
+    def disable(self):
+        self.disabled = True
+
+    def start(self, key, force_enable=False):
+        if self.disabled and not force_enable:
+            return
+
+        self.start_times[key] = time.time()
+
+    def end(self, key, PERF_CNT=1, force_enable=False):
+        if self.disabled and not force_enable:
+            return
+
+        if key not in self.start_times:
+            return
+
+        diff = time.time() - self.start_times[key]
+
+        if key not in self.times:
+            self.times[key] = []
+
+        self.times[key].append(diff / PERF_CNT)
+
+    def get(self, key):
+        if key not in self.times:
+            return 0
+
+        return sum(self.times[key]) / len(self.times[key])
+
+    def print(self, units="s"):
+        for key in self.times:
+            average = self.get(key)
+            if units == "s":
+                pass
+            elif units == "ms":
+                average *= 1000
+            elif units == "us":
+                average *= 1000000
+            elif units == "ns":
+                average *= 1000000000
+            else:
+                raise ValueError(f"Invalid units: {units}")
+            print(f"{key}: {average:.3f}{units}")
+
+
+profiler = Profiler()
 
 
 KERNELS_DIR = Path(__file__).resolve().parent / "kernels"
