@@ -84,7 +84,7 @@ class Profiler:
 profiler = Profiler()
 
 
-KERNELS_DIR = "/workspace/loom/tmp_output/kernels"
+KERNELS_DIR = os.environ.get("LOOM_KERNELS_DIR", "/workspace/loom/tmp_output/kernels")
 sys.path.insert(0, str(KERNELS_DIR))
 
 from host_ttnn import run as run_generated_matmul

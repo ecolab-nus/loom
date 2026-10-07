@@ -88,10 +88,14 @@ def run_step_1_exploration(
     constraints_dir: Path,
     debug: bool,
     skip_etg: bool = False,
+    blocked_waves: bool = False,
+    explore_parallel_sets: bool = False,
 ) -> tuple[str, str]:
     """Step 1: Exploration pipeline (stages 0→5) via pybind11.
 
     If ``skip_etg`` is True, ETG generation is disabled and no ETG file is written.
+    ``blocked_waves`` and ``explore_parallel_sets`` select the spatial-mapping
+    options (see ``run_pipeline``).
     """
     logging.info("")
     logging.info("=" * 72)
@@ -118,6 +122,8 @@ def run_step_1_exploration(
             produce_etg=True,
             skip_etg=skip_etg,
             # spatial_reuse=False
+            blocked_waves=blocked_waves,
+            explore_parallel_sets=explore_parallel_sets,
         )
         if not skip_etg:
             exploration_etg.write_text(etg_json_text)
@@ -128,8 +134,43 @@ def run_step_1_exploration(
     return explored_mlir, etg_json_text
 
 
-def run_step_2_etg_resolution(
+def prune_infeasible_variants(
     etg_json_text: str,
+    constraints_dir: Path,
+    debug: bool,
+    symbol_domains: dict[str, list[int]] | None = None,
+) -> tuple[list[dict[str, Any]], dict[str, list[int]]]:
+    """Drop variants whose loop trip counts no block size can satisfy.
+
+    The solver would report these INFEASIBLE; removing them up front skips
+    their ETG resolution and solving. Returns the kept variants and the symbol
+    domains derived from all variants, which Step 3 must use so that pruning
+    cannot change the domains it would have derived.
+    """
+    from loom.loom_utils.modeling import derive_domains_from_etg  # noqa: PLC0415
+    from loom.solver import find_unsatisfiable_trip_count  # noqa: PLC0415
+
+    variants = json.loads(etg_json_text)
+    domains = {**derive_domains_from_etg(variants), **(symbol_domains or {})}
+    kept, pruned = [], []
+    for variant in variants:
+        reason = find_unsatisfiable_trip_count(variant, domains)
+        if reason is None:
+            kept.append(variant)
+        else:
+            pruned.append(f"{variant.get('variant_name', '?')}  {reason}")
+
+    logging.info(f"Pruned {len(pruned)}/{len(variants)} variant(s) with unsatisfiable trip counts.")
+    if debug and pruned:
+        (constraints_dir / "p01_pruned_variants.txt").write_text("\n".join(pruned) + "\n")
+    if not kept:
+        logging.error("All variants UNSAT. No feasible block sizes. Aborting.")
+        sys.exit(1)
+    return kept, domains
+
+
+def run_step_2_etg_resolution(
+    etg_variants: str | list[dict[str, Any]],
     njobs: int,
     constraints_dir: Path,
     hw_spec: str | Path | None = None,
@@ -153,7 +194,7 @@ def run_step_2_etg_resolution(
     logging.info(f"  Output : {resolved_etg}")
 
     with pipeline_timer("Step 2: ETG Resolution"):
-        variants = json.loads(etg_json_text)
+        variants = json.loads(etg_variants) if isinstance(etg_variants, str) else etg_variants
         resolved_variants = resolve_etg_variants(variants, njobs=njobs, evaluator_path=evaluator)
         resolved_etg.write_text(smart_json_dumps(resolved_variants))
 
@@ -251,6 +292,8 @@ def run_pipeline(
     assigned_block_size: dict[str, Any] | None = None,
     topk_candidates: int | None = None,
     topk_block_size: int = 1,
+    wave_distribution: str = "cyclic",
+    explore_parallel_sets: bool = False,
 ) -> None:
     """Run the full Loom compilation pipeline.
 
@@ -282,7 +325,17 @@ def run_pipeline(
     topk_block_size:
         Optional positive odd integer controlling 32-step neighbor sampling
         around each solver-selected block-size assignment.
+    wave_distribution:
+        How iterations of a parallel dimension larger than its cores are
+        distributed: ``"cyclic"`` (core c takes c, c + C, ...) or ``"blocked"``
+        (core c takes a contiguous range).
+    explore_parallel_sets:
+        Also explore which loops run spatially: promote perfectly nested inner
+        sequential loops into the outer parallel loop and demote parallel
+        dimensions to inner sequential loops, one variant per choice.
     """
+    if wave_distribution not in ("cyclic", "blocked"):
+        raise ValueError(f"wave_distribution must be 'cyclic' or 'blocked', got {wave_distribution!r}")
     output_path = Path(output_path)
     ir_dir = output_path / "IRs"
     constraints_dir = output_path / "constraints"
@@ -302,6 +355,8 @@ def run_pipeline(
     explored_mlir, etg_json_text = run_step_1_exploration(
         mlir_text, str(hw_spec), ir_dir, constraints_dir, debug,
         skip_etg=has_assigned_block_size and not needs_manual_etg,
+        blocked_waves=wave_distribution == "blocked",
+        explore_parallel_sets=explore_parallel_sets,
     )
     del mlir_text
 
@@ -342,8 +397,12 @@ def run_pipeline(
         logging.info("=" * 72)
         logging.info("Skipped due to assigned_block_size override.")
     else:
-        # Step 2: ETG resolution
-        run_step_2_etg_resolution(etg_json_text, njobs, constraints_dir, hw_spec)
+        # Step 2: ETG resolution (of the variants that can be feasible)
+        variants, symbol_domains = prune_infeasible_variants(
+            etg_json_text, constraints_dir, debug, symbol_domains
+        )
+        run_step_2_etg_resolution(variants, njobs, constraints_dir, hw_spec)
+        del variants
 
         # Step 3: Solver
         resolved_etg_path = constraints_dir / "p02_resolved_etg.json"
