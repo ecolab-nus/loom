@@ -282,8 +282,8 @@ def run_pipeline(
         Optional positive integer limiting materialization to the top K
         candidates by optimal time.
     topk_block_size:
-        Optional positive odd integer controlling 32-step neighbor sampling
-        around each solver-selected block-size assignment.
+        Optional positive odd integer: sample the nearest feasible domain
+        neighbors around each solver-selected block-size assignment.
     explicit_memory:
         Treat frontend output as a stage-02 explicit-memory template.
     enumerate_bindings:

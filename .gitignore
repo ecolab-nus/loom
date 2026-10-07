@@ -3,6 +3,8 @@
 
 #codex
 .codex
+REFERENCE.md
+PLAN.md
 
 # Python packaging artifacts
 .venv/

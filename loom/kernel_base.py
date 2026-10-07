@@ -107,13 +107,10 @@ class LoomKernel:
         Human-readable name shown in CLI help text.  Defaults to the
         class name.
 
-    ``assume_divisible: bool``
-        Passed to ``helion_mlir.generate_mlir``. When true, lowering assumes
-        tile bounds are divisible and may omit dynamic tail handling.
-
-    ``tile_divisible: dict[str | int, bool] | None``
-        Optional per-tile divisibility attributes passed directly to
-        ``helion_mlir.generate_mlir``.
+    ``residency: dict[str, str] | None``
+        Pins every load of a host tensor to a platform memory name, e.g.
+        ``{"k_view": "L1_S"}``. A config ``"residency"`` entry overrides it.
+        Unpinned operands are placed by processor binding.
 
     ``tile_upper_bounds: dict[str | int, int] | None``
         Optional per-tile upper-bound overrides passed to
@@ -123,9 +120,8 @@ class LoomKernel:
     # Override in subclass for a nicer description in --help.
     kernel_name: ClassVar[str] = ""
     # Override per kernel to control Helion MLIR lowering behavior.
-    assume_divisible: ClassVar[bool] = False
-    tile_divisible: ClassVar[dict[str | int, bool] | None] = None
     tile_upper_bounds: ClassVar[dict[str | int, int] | None] = None
+    residency: ClassVar[dict[str, str] | None] = None
 
     # ------------------------------------------------------------------ #
     # Subclass interface                                                   #
@@ -165,9 +161,8 @@ class LoomKernel:
         print_debug_info(bound)
         return _helion_generate_mlir(
             bound,
-            assume_divisible=cls.assume_divisible,
-            tile_divisible=cls.tile_divisible,
             tile_upper_bounds=cls.tile_upper_bounds,
+            residency=cls.residency,
         )
 
     # ------------------------------------------------------------------ #
@@ -273,6 +268,11 @@ class LoomKernel:
         enumerate_bindings = args.enumerate_bindings or bool(
             config_data.get("enumerate_bindings", False)
         )
+        if "residency" in config_data:
+            try:
+                cls.residency = {**(cls.residency or {}), **parse_residency(config_data["residency"])}
+            except ValueError as e:
+                parser.error(str(e))
         # Required parameter check
         missing = []
         if not output_path:
@@ -296,6 +296,8 @@ class LoomKernel:
                     parser.error(
                         f"block_sizes['{sym}'] must be a dict with 'lb' and 'ub' keys."
                     )
+                if bounds["lb"] < 1:
+                    parser.error(f"block_sizes['{sym}']: lb must be >= 1.")
                 if bounds["lb"] > bounds["ub"]:
                     parser.error(
                         f"block_sizes['{sym}']: lb ({bounds['lb']}) must be <= ub ({bounds['ub']})."
@@ -317,6 +319,15 @@ class LoomKernel:
             explicit_memory=explicit_memory,
             enumerate_bindings=enumerate_bindings,
         )
+
+
+def parse_residency(value: object) -> dict[str, str]:
+    """Validate a ``{"<host tensor>": "<platform memory>"}`` residency map."""
+    if not isinstance(value, dict) or not all(
+        isinstance(k, str) and isinstance(v, str) for k, v in value.items()
+    ):
+        raise ValueError('Config \'residency\' must map host tensor names to memory names, e.g. {"k_view": "L1_S"}.')
+    return dict(value)
 
 
 def _positive_int(value: str) -> int:

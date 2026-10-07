@@ -5,6 +5,7 @@ import json
 import logging
 import re
 import sys
+from bisect import bisect_left
 from itertools import product
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from pathlib import Path
@@ -20,6 +21,8 @@ from ..loom_utils.ast import (
     build_memory_constraints,
     Const,
     Div,
+    Node,
+    Switch,
     parse_expr,
     parse_constraint,
 )
@@ -52,17 +55,9 @@ def solve_variant(
     ctx.add_hard_constraints(hard_constraints_ast)
     for memory, constraint in memory_constraints_ast:
         ctx.add_hard_constraints([constraint], label_prefix=f"memory[{memory}]")
-    seq_iter_exprs, seq_iter_labels, temp_iter_exprs, temp_iter_labels = (
-        _collect_iter_num_constraints(
-            variant["constraint_scope"]["metadata"]["iter_num"]
-        )
+    ctx.add_divisibility_constraints(
+        *_trip_counts(variant["constraint_scope"]["metadata"]["iter_num"])
     )
-    ctx.add_trip_count_constraints(
-        seq_iter_exprs,
-        labels=seq_iter_labels,
-        require_divisibility=True,
-    )
-    ctx.add_trip_count_constraints(temp_iter_exprs, labels=temp_iter_labels)
     status, scaled_min_val, assignments = ctx.find_optimum(t_total_ast)
     min_val = scaled_min_val
 
@@ -82,50 +77,36 @@ def solve_variant(
     }
 
 
-def _collect_iter_num_constraints(
-    iter_num: dict,
-) -> tuple[list[dict], list[str], list[dict], list[str]]:
-    """Collect solver feasibility expressions from constraint metadata."""
-    seq_iter, _ = _unpack_iter_num(iter_num["seq_iter"], "iter_num.seq_iter")
-    seq_exprs = [seq_iter]
-    seq_labels = ["iter_num.seq_iter"]
-    temp_exprs = []
-    temp_labels = []
-
-    for i, raw_temp_iter in enumerate(iter_num.get("temp_iter", [])):
-        label = f"iter_num.temp_iter[{i}]"
-        temp_iter, _ = _unpack_iter_num(raw_temp_iter, label)
-        if _contains_symbol(temp_iter, "tile_b"):
-            seq_exprs.append(temp_iter)
-            seq_labels.append(label)
-        else:
-            temp_exprs.append(temp_iter)
-            temp_labels.append(label)
-
-    return seq_exprs, seq_labels, temp_exprs, temp_labels
+def _trip_counts(iter_num: dict) -> tuple[list[dict], list[str]]:
+    """Every loop trip count; each must divide exactly (no tail tiles)."""
+    entries = [
+        (f"iter_num.{kind}[{i}]", raw)
+        for kind in ("seq_iter", "temp_iter")
+        for i, raw in enumerate(iter_num[kind])
+    ]
+    tiled = [(raw, label) for label, raw in entries if "Const" not in raw]
+    return [raw for raw, _ in tiled], [label for _, label in tiled]
 
 
-def _unpack_iter_num(raw: object, label: str) -> tuple[dict, bool]:
-    """Decode an [expression, asure_divisible] iteration metadata pair."""
-    if (
-        not isinstance(raw, list)
-        or len(raw) != 2
-        or not isinstance(raw[0], dict)
-        or not isinstance(raw[1], bool)
-    ):
-        raise ValueError(f"{label} must be [expression, bool]")
-    return raw[0], raw[1]
-
-
-def _contains_symbol(expr: object, symbol: str) -> bool:
-    """Return whether a serialized expression contains the named Sym node."""
-    if isinstance(expr, dict):
-        if expr == {"Sym": symbol}:
-            return True
-        return any(_contains_symbol(value, symbol) for value in expr.values())
-    if isinstance(expr, list):
-        return any(_contains_symbol(value, symbol) for value in expr)
-    return False
+def _switch_violation(node: Node, env: dict[str, int]) -> str | None:
+    """Apply the solver's rule that exactly one Switch alternative holds."""
+    seen: set[int] = set()
+    stack = [node]
+    while stack:
+        n = stack.pop()
+        if id(n) in seen:
+            continue
+        seen.add(id(n))
+        if isinstance(n, Switch):
+            matches = sum(bool(cond.eval(env)) for cond, _ in n.cases)
+            if matches != 1:
+                return f"{matches} perf-model alternatives match ({str(n)[:200]})"
+        for value in vars(n).values():
+            items = value if isinstance(value, (list, tuple)) else [value]
+            for item in items:
+                parts = item if isinstance(item, tuple) else (item,)
+                stack.extend(x for x in parts if isinstance(x, Node))
+    return None
 
 
 def _parse_solver_time_cost(time_cost: object):
@@ -173,7 +154,7 @@ def prepare_manual_block_sizes(
             for name, assignment in normalized.items()
         }
 
-    domains = {**derive_domains_from_etg(variants), **(symbol_domains or {})}
+    domains = derive_domains_from_etg(variants, symbol_domains)
     accepted: dict[str, Any] = {}
     rejections: list[str] = []
     for index, variant in enumerate(variants):
@@ -323,6 +304,7 @@ def _manual_infeasibility(
     variant: dict,
     assignment: dict[str, int],
     domains: dict[str, list[int]],
+    time_ast: Node | None = None,
 ) -> str | None:
     scope = variant["constraint_scope"]
     metadata = scope["metadata"]
@@ -343,13 +325,7 @@ def _manual_infeasibility(
         if not constraint.eval(assignment):
             return f"capacity of memory '{memory}' is exceeded"
 
-    seq_exprs, seq_labels, temp_exprs, temp_labels = (
-        _collect_iter_num_constraints(metadata["iter_num"])
-    )
-    for raw, label, divisible in [
-        *((raw, label, True) for raw, label in zip(seq_exprs, seq_labels)),
-        *((raw, label, False) for raw, label in zip(temp_exprs, temp_labels)),
-    ]:
+    for raw, label in zip(*_trip_counts(metadata["iter_num"])):
         node = parse_expr(raw)
         if not isinstance(node, Div):
             raise ValueError(f"Expected top-level Div node in {label}")
@@ -358,65 +334,58 @@ def _manual_infeasibility(
         denominator_value = 1
         for denominator in denominators:
             denominator_value *= denominator.eval(assignment)
-        if denominator_value <= 0 or denominator_value > numerator_value:
-            return f"{label} exceeds its iteration extent"
-        if divisible and numerator_value % denominator_value:
+        if denominator_value <= 0 or numerator_value % denominator_value:
             return f"{label} does not divide its iteration extent"
-    return None
+    if time_ast is None:
+        time_ast = compute_total_time_ast(variant)
+    return _switch_violation(time_ast, assignment)
 
 
 def sample_block_size_neighbors(
     assignment: dict[str, int],
-    metadata_symbols: dict[str, Any],
+    variant: dict,
+    domains: dict[str, list[int]],
     topk_block_size: int = 1,
 ) -> list[dict[str, int]]:
-    """Return the solved assignment plus local 32-step block-size neighbors."""
+    """Return the solved assignment plus its nearest feasible neighbors.
+
+    Per symbol, up to ``topk_block_size // 2`` domain values on each side that
+    are feasible with the other symbols fixed; combinations are re-checked.
+    """
     if topk_block_size <= 0:
         raise ValueError("topk_block_size must be a positive integer")
-
     if topk_block_size == 1:
         return [dict(assignment)]
 
     radius = topk_block_size // 2
-    sample_symbols = [
-        sym for sym in sorted(metadata_symbols)
-        if sym in assignment and not sym.startswith("__")
-    ]
-    fixed = {
-        sym: value for sym, value in assignment.items()
-        if sym not in sample_symbols
-    }
+    time_ast = compute_total_time_ast(variant)
+
+    def feasible(combo: dict[str, int]) -> bool:
+        return _manual_infeasibility(variant, combo, domains, time_ast) is None
 
     symbol_options: list[tuple[str, list[int]]] = []
-    for sym in sample_symbols:
-        base = assignment[sym]
-        options = [base]
-        for step in range(1, radius + 1):
-            for candidate in (base - 32 * step, base + 32 * step):
-                if candidate > 0 and candidate % 32 == 0 and candidate not in options:
-                    options.append(candidate)
+    for sym in sorted(variant["constraint_scope"]["metadata"]["symbols"]):
+        if sym not in assignment or sym not in domains or sym.startswith("__"):
+            continue
+        domain = domains[sym]
+        i = bisect_left(domain, assignment[sym])
+        options = [assignment[sym]]
+        for side in (reversed(domain[:i]), domain[i + 1:]):
+            found = 0
+            for value in side:
+                if found == radius:
+                    break
+                if feasible({**assignment, sym: value}):
+                    options.append(value)
+                    found += 1
         symbol_options.append((sym, options))
 
-    if not symbol_options:
-        return [dict(assignment)]
-
-    combos: list[dict[str, int]] = []
-    seen: set[tuple[tuple[str, int], ...]] = set()
-
-    def add_combo(values: dict[str, int]) -> None:
-        key = tuple(sorted(values.items()))
-        if key not in seen:
-            seen.add(key)
-            combos.append(values)
-
-    add_combo(dict(assignment))
+    combos = [dict(assignment)]
     names = [sym for sym, _ in symbol_options]
-    options_product = product(*(options for _, options in symbol_options))
-    for values in options_product:
-        combo = dict(fixed)
-        combo.update(zip(names, values))
-        add_combo(combo)
-
+    for values in product(*(options for _, options in symbol_options)):
+        combo = {**assignment, **dict(zip(names, values))}
+        if combo != assignment and feasible(combo):
+            combos.append(combo)
     return combos
 
 
@@ -464,8 +433,7 @@ def run(
 
     variants = load_variants(input_path)
     total = len(variants)
-    etg_domains = derive_domains_from_etg(variants)
-    domains = {**etg_domains, **(symbol_domains or {})}
+    domains = derive_domains_from_etg(variants, symbol_domains)
 
     print(f"Solving {total} variants with {njobs} process(es) [CPMpy/CP-SAT]...")
 
@@ -506,7 +474,7 @@ def run(
 
     block_sizes = {
         get_variant_name(r["variant"], r["index"]): _materialization_assignments(
-            r, topk_block_size
+            r, domains, topk_block_size
         )
         for r in selected_results
     }
@@ -580,18 +548,13 @@ def run(
     return block_sizes
 
 
-def _materialization_assignments(r: dict, topk_block_size: int) -> Any:
+def _materialization_assignments(
+    r: dict, domains: dict[str, list[int]], topk_block_size: int
+) -> Any:
     assignments = dict(r["assignments"])
     if topk_block_size == 1:
         return assignments
-
-    metadata_symbols = (
-        r["variant"]
-        .get("constraint_scope", {})
-        .get("metadata", {})
-        .get("symbols", {})
-    )
-    return sample_block_size_neighbors(assignments, metadata_symbols, topk_block_size)
+    return sample_block_size_neighbors(assignments, r["variant"], domains, topk_block_size)
 
 
 def _rank_optimal_results(results: list[dict]) -> list[dict]:

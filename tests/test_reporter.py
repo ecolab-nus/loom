@@ -44,13 +44,13 @@ def _render(sequential: dict) -> list[str]:
 def test_func_breakdown_prints_aligned_cost_before_label() -> None:
     lines = _render(
         _sequential(
-            ("linalg.batch_matmul(%1: 1, %2, %3)", [_scenario(1234)]),
+            ("linalg.batch_matmul(%1, %2, %3)", [_scenario(1234)]),
             ("arith.addf(%4, %5)", [_scenario(2)]),
         )
     )
 
     assert lines == [
-        "       1,234 solver units  linalg.batch_matmul(%1: 1, %2, %3)",
+        "       1,234 solver units  linalg.batch_matmul(%1, %2, %3)",
         "           2 solver units  arith.addf(%4, %5)",
     ]
     assert lines[0].index(" solver units") == lines[1].index(" solver units")

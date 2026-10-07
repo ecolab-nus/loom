@@ -18,7 +18,7 @@ class WorkloadVisit:
 
 @dataclass(frozen=True, order=True)
 class MemoryAccessSummary:
-    mem_kind: int
+    memory: str
     access: str
     op_label: str
     total_trip: int
@@ -73,24 +73,24 @@ def summarize_memory_accesses(
     variant: dict,
     assignments: dict[str, int],
 ) -> list[MemoryAccessSummary]:
-    """Aggregate operand accesses by memory kind, direction, and op label."""
+    """Aggregate operand accesses by memory, direction, and op label."""
     root = variant.get("kernel_block", variant)
-    totals: dict[tuple[int, str, str], int] = {}
+    totals: dict[tuple[str, str, str], int] = {}
 
     for visit in walk_workloads(root, assignments):
         op_label = str(
             visit.func.get("op_label", visit.func.get("name", "unknown"))
         )
         for direction in ("read", "write"):
-            for mem_kind in _parse_operand_mem_kinds(
+            for memory in _parse_operand_memories(
                 visit.func.get(direction, "")
             ):
-                key = (mem_kind, direction, op_label)
+                key = (memory, direction, op_label)
                 totals[key] = totals.get(key, 0) + visit.total_trip
 
     return [
         MemoryAccessSummary(
-            mem_kind=key[0],
+            memory=key[0],
             access=key[1],
             op_label=key[2],
             total_trip=total_trip,
@@ -109,7 +109,7 @@ def summarize_memory_accesses(
 def format_memory_access_summary(
     summaries: list[MemoryAccessSummary],
 ) -> list[str]:
-    """Format one row per memory kind, direction, and operation label."""
+    """Format one row per memory, direction, and operation label."""
     lines = ["Memory Access Summary"]
     if not summaries:
         lines.append("  (no memory access metadata)")
@@ -117,7 +117,7 @@ def format_memory_access_summary(
 
     rows = [
         (
-            str(entry.mem_kind),
+            entry.memory,
             entry.access.upper(),
             f"{entry.total_trip:,}",
             entry.op_label,
@@ -125,7 +125,7 @@ def format_memory_access_summary(
         for entry in summaries
     ]
 
-    headers = ("mem_kind", "access", "count", "op_label")
+    headers = ("memory", "access", "count", "op_label")
     widths = [
         max(len(headers[i]), *(len(row[i]) for row in rows))
         for i in range(len(headers))
@@ -143,20 +143,16 @@ def format_memory_access_summary(
     return lines
 
 
-def _parse_operand_mem_kinds(raw: object) -> list[int]:
-    """Parse the ETG `%ssa: mem_kind;%ssa: mem_kind` representation."""
+def _parse_operand_memories(raw: object) -> list[str]:
+    """Parse the ETG `%ssa: <memory>;%ssa: <memory>` representation."""
     text = str(raw).strip()
     if not text:
         return []
-    kinds: list[int] = []
+    memories: list[str] = []
     for operand in text.split(";"):
-        name, separator, kind = operand.rpartition(":")
-        if not separator or not name.strip().startswith("%"):
+        name, separator, memory = operand.rpartition(":")
+        memory = memory.strip()
+        if not separator or not name.strip().startswith("%") or not memory:
             raise ValueError(f"invalid ETG operand access metadata: {operand!r}")
-        try:
-            kinds.append(int(kind.strip()))
-        except ValueError as exc:
-            raise ValueError(
-                f"invalid ETG memory kind in operand metadata: {operand!r}"
-            ) from exc
-    return kinds
+        memories.append(memory)
+    return memories

@@ -20,7 +20,7 @@ import helion.language as hl
 
 from loom import LoomKernel
 from loom.loom_utils.kernel_size import resolve_kernel_shape_args
-from helion_mlir.custom_op import broadcast, set_memory_space
+from helion_mlir.custom_op import broadcast
 
 
 def _flash__attention(
@@ -45,7 +45,7 @@ def _flash__attention(
         acc = hl.zeros([tile_b, tile_m, head_dim], dtype=torch.float16)
         q = q_view[tile_b, tile_m, :]
         for tile_n in hl.tile(v_view.size(1)):
-            k = set_memory_space(k_view[tile_b, :, tile_n], local_mem_kind=1)
+            k = k_view[tile_b, :, tile_n]
             qk = torch.bmm(q, k)
             qk = qk * qk_scale_dev
             m_ij = torch.maximum(m_i, torch.amax(qk, -1, keepdim=True))
@@ -76,8 +76,6 @@ class FlashAttention(LoomKernel):
     H: int = 128
     d: int = int(1024 * 64 / H)
     _logical_B: int = B
-
-    assume_divisible = True
 
     # Assign the helion-decorated function as a class attribute.
     # We cannot stack @staticmethod with @helion.kernel because the helion

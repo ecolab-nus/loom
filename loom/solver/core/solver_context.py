@@ -84,19 +84,16 @@ class SolverContext:
         denoms.reverse()
         return current, denoms
 
-    def add_trip_count_constraints(
+    def add_divisibility_constraints(
         self,
         trip_count_exprs: list[dict],
         labels: list[str] | None = None,
-        require_divisibility: bool = False,
     ) -> None:
-        """Add no-oversize constraints for each loop trip-count expression.
+        """Require each trip count's numerator to divide exactly.
 
-        Flattens nested Div chains before resolving:
-          Div(Div(N, d0), d1)  ->  d0 * d1 <= N
-
-        Calls _resolve_expr() directly on each non-Div leaf node to avoid the
-        ceiling-division path that _resolve_expr() applies to Div nodes.
+        Flattens nested Div chains, Div(Div(N, d0), d1) -> N % (d0 * d1) == 0,
+        resolving leaves directly to avoid the ceil path _resolve_expr applies
+        to Div nodes.
         """
         resolver = ExprResolver(self.symbol_map)
 
@@ -113,25 +110,14 @@ class SolverContext:
                 )
 
             numerator_node, denom_nodes = self._flatten_div_chain(node)
-
-            # Resolve numerator — guaranteed non-Div by _flatten_div_chain
             num_cp = resolver._resolve_expr(numerator_node)
-
-            # Build denominator product by resolving each denom leaf individually.
-            # This avoids calling _resolve_expr on a Div node (which would apply
-            # ceiling division instead of exact integer division).
             denom_cp = resolver._resolve_expr(denom_nodes[0])
             for d in denom_nodes[1:]:
                 denom_cp = denom_cp * resolver._resolve_expr(d)
 
-            if require_divisibility:
-                div_c = num_cp % denom_cp == 0
-                self.model += div_c
-                self._tracked_constraints.append((f"{label}.divisible", div_c))
-
-            no_oversize_c = denom_cp <= num_cp
-            self.model += no_oversize_c
-            self._tracked_constraints.append((label, no_oversize_c))
+            div_c = num_cp % denom_cp == 0
+            self.model += div_c
+            self._tracked_constraints.append((f"{label}.divisible", div_c))
 
     def find_optimum(
         self,

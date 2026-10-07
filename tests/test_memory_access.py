@@ -84,19 +84,19 @@ def test_summary_counts_operands_and_merges_matching_labels() -> None:
         [
             _loop(
                 {"Const": 4},
-                [_func("linalg.add(%0, %1, %2)", read="%0: 0;%1: 0", write="%2: 1")],
+                [_func("linalg.add(%0, %1, %2)", read="%0: L1_R;%1: L1_R", write="%2: L1_S")],
             ),
             _loop(
                 {"Const": 6},
-                [_func("linalg.add(%0, %1, %2)", read="%0: 0;%1: 0", write="%2: 1")],
+                [_func("linalg.add(%0, %1, %2)", read="%0: L1_R;%1: L1_R", write="%2: L1_S")],
             ),
             _loop(
                 {"Sym": "iters"},
                 [
                     _func(
                         "linalg.matmul(%3, %4, %5)",
-                        read="%3: 0;%4: 1",
-                        write="%5: 0",
+                        read="%3: L1_R;%4: L1_S",
+                        write="%5: L1_R",
                     )
                 ],
             ),
@@ -110,20 +110,20 @@ def test_summary_counts_operands_and_merges_matching_labels() -> None:
 
     assert summaries == [
         MemoryAccessSummary(
-            mem_kind=0,
+            memory="L1_R",
             access="read",
             op_label="linalg.add(%0, %1, %2)",
             total_trip=20,
         ),
         MemoryAccessSummary(
-            mem_kind=0,
+            memory="L1_R",
             access="read",
             op_label="linalg.matmul(%3, %4, %5)",
             total_trip=8,
         ),
-        MemoryAccessSummary(0, "write", "linalg.matmul(%3, %4, %5)", 8),
-        MemoryAccessSummary(1, "read", "linalg.matmul(%3, %4, %5)", 8),
-        MemoryAccessSummary(1, "write", "linalg.add(%0, %1, %2)", 10),
+        MemoryAccessSummary("L1_R", "write", "linalg.matmul(%3, %4, %5)", 8),
+        MemoryAccessSummary("L1_S", "read", "linalg.matmul(%3, %4, %5)", 8),
+        MemoryAccessSummary("L1_S", "write", "linalg.add(%0, %1, %2)", 10),
     ]
 
 
@@ -140,26 +140,26 @@ def test_summary_handles_old_etg_and_empty_fields() -> None:
 def test_summary_walks_placed_functions() -> None:
     variant = {
         "kernel_block": _block(
-            [_func("placed", read="%0: 2", write="%1: 3", placed=True)]
+            [_func("placed", read="%0: DRAM", write="%1: L1", placed=True)]
         )
     }
 
     assert summarize_memory_accesses(variant, {}) == [
-        MemoryAccessSummary(2, "read", "placed", 1),
-        MemoryAccessSummary(3, "write", "placed", 1),
+        MemoryAccessSummary("DRAM", "read", "placed", 1),
+        MemoryAccessSummary("L1", "write", "placed", 1),
     ]
 
 
 def test_summary_table_contains_only_count_and_op_label() -> None:
     lines = format_memory_access_summary(
         [
-            MemoryAccessSummary(0, "write", "linalg.add(%0, %1)", 512),
-            MemoryAccessSummary(1, "read", "loom.copy(%2, %3)", 8192),
+            MemoryAccessSummary("L1", "write", "linalg.add(%0, %1)", 512),
+            MemoryAccessSummary("DRAM", "read", "loom.copy(%2, %3)", 8192),
         ]
     )
     rendered = "\n".join(lines)
 
-    assert "mem_kind  access  count" in rendered
-    assert "0         WRITE   512    linalg.add(%0, %1)" in rendered
-    assert "1         READ    8,192  loom.copy(%2, %3)" in rendered
+    assert "memory  access  count" in rendered
+    assert "L1      WRITE   512    linalg.add(%0, %1)" in rendered
+    assert "DRAM    READ    8,192  loom.copy(%2, %3)" in rendered
     assert "tensor<" not in rendered

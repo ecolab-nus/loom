@@ -101,9 +101,7 @@ class MQADecode(LoomKernel):
     L: int = 2048
     D: int = 64
 
-    assume_divisible: bool = True
     tile_upper_bounds = {"tile_n": 2048}
-    tile_divisible = {"tile_b": True, "tile_n": True}
 
     kernel = helion.kernel(
         static_shapes=False,

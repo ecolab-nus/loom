@@ -40,10 +40,17 @@ optional solver controls:
 }
 ```
 
+Every tile size must divide its loop exactly; a grid tile's block count must
+also divide the number of cores it is spread over. There is no tail handling,
+so a shape with no exact tiling is infeasible. `block_sizes` bounds a tile's
+candidates to the integers in `[lb, ub]`; under `LOOM_TARGET=tt`, tiles that
+size the bottom two dimensions of an allocation must also be multiples of 32.
+
 Use `assigned_block_size` to bypass the solver and materialize explicit
 assignments. Loom still resolves the ETG and rejects each assignment that
-violates a symbol domain, loop extent, hard constraint, or memory capacity.
-Valid variants continue; the run fails if none remain.
+violates a symbol domain, an exact loop extent, a hard constraint, or memory
+capacity, or for which a primitive matches zero or several perf-model
+alternatives. Valid variants continue; the run fails if none remain.
 
 ```json
 {
@@ -75,11 +82,21 @@ direct movers are infeasible; it does not fall back to an earlier registration.
 Fixed mode preserves the ordinary spatial/broadcast candidate names. With
 enumeration on, Loom explores legal combinations and adds deterministic binding
 and mover suffixes. Each primitive in a fused `linalg.generic`
-body is a binding site; the generic remains fused in IR. Unannotated residency
-is inferred, while explicit annotations, including kind zero, constrain the
-choice. For authored stage-02 memrefs, write
-`loom.explicit_local_mem_kind = 0 : i64` on `loom.alloc` when kind zero must be
-distinguished from an omitted annotation.
+body is a binding site; the generic remains fused in IR. Unpinned residency
+is chosen by binding. To pin an operand, name a platform memory:
+
+- config: `"residency": {"k_view": "L1_S"}` pins every load of host tensor `k_view`;
+- kernel: `set_memory_space(k_view[...], memory="L1_S")` pins one load.
+
+Pins filter candidates in both binding modes. Unknown memories, `mem_`-prefixed
+names, and numeric `local_mem_kind` encodings are rejected before lowering; an
+unsatisfiable pin reports the operand and the memories candidates offer.
+Authored stage-02 allocations name their memory with `on @<memory>`; omit
+`loom.inferred_residency` to make that choice binding.
+
+Kernel arguments live in the platform's DRAM-domain memory: the one memory whose
+ADL op carries `domain = "DRAM"`, as emitted by the MLAR exporter. Platforms
+exported before memory domains existed must be re-exported.
 
 Loom rewrites internal allocations and supported aliases, then selects only
 declared direct movers for transfers already present in the computation. A
@@ -96,8 +113,9 @@ materialization rewrites. An unset or empty variable selects the generic
 target; other values are rejected. The selected target is recorded as
 `loom.target` in MLIR and in each ETG variant. Generic accounting uses dense
 allocation bytes. TT accounting additionally enforces the bottom-two-dimension
-rules, pads a static size-one storage dimension to 32 elements, and includes
-reduction configuration storage.
+rules, pads a static size-one storage dimension to 32 elements, includes
+reduction configuration storage, and aligns tile sizes in the bottom two
+allocation dimensions to 32.
 
 ## Writing a Kernel
 
