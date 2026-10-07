@@ -119,13 +119,13 @@ class LoomKernel:
         ``helion_mlir.generate_mlir``.
 
     ``wave_distribution: str``
-        ``"cyclic"`` (default) or ``"blocked"``: how iterations of a parallel
+        ``"blocked"`` (default) or ``"cyclic"``: how iterations of a parallel
         dimension larger than its cores are spread over the cores. Overridden
         by the config key ``wave_distribution`` and ``--wave-distribution``.
 
     ``explore_parallel_sets: bool``
-        Also explore which loops run spatially (see ``run_pipeline``).
-        Overridden by the config key and ``--explore-parallel-sets``.
+        Also explore which loops run spatially (see ``run_pipeline``); on by
+        default. Overridden by the config key and ``--[no-]explore-parallel-sets``.
     """
 
     # Override in subclass for a nicer description in --help.
@@ -135,8 +135,8 @@ class LoomKernel:
     tile_divisible: ClassVar[dict[str | int, bool] | None] = None
     tile_upper_bounds: ClassVar[dict[str | int, int] | None] = None
     # Spatial-mapping options (see run_pipeline).
-    wave_distribution: ClassVar[str] = "cyclic"
-    explore_parallel_sets: ClassVar[bool] = False
+    wave_distribution: ClassVar[str] = "blocked"
+    explore_parallel_sets: ClassVar[bool] = True
 
     # ------------------------------------------------------------------ #
     # Subclass interface                                                   #
@@ -242,14 +242,14 @@ class LoomKernel:
             choices=("cyclic", "blocked"),
             default=None,
             help="Distribute wave-loop iterations to cores cyclically or in contiguous blocks "
-            "(default: config 'wave_distribution', else the kernel's setting, else cyclic).",
+            "(default: config 'wave_distribution', else the kernel's setting, else blocked).",
         )
         parser.add_argument(
             "--explore-parallel-sets",
             action=argparse.BooleanOptionalAction,
             default=None,
             help="Also explore which loops run spatially (default: config "
-            "'explore_parallel_sets', else the kernel's setting).",
+            "'explore_parallel_sets', else the kernel's setting, else on).",
         )
         return parser
 

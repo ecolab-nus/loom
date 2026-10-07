@@ -88,8 +88,8 @@ def run_step_1_exploration(
     constraints_dir: Path,
     debug: bool,
     skip_etg: bool = False,
-    blocked_waves: bool = False,
-    explore_parallel_sets: bool = False,
+    blocked_waves: bool = True,
+    explore_parallel_sets: bool = True,
 ) -> tuple[str, str]:
     """Step 1: Exploration pipeline (stages 0→5) via pybind11.
 
@@ -292,8 +292,8 @@ def run_pipeline(
     assigned_block_size: dict[str, Any] | None = None,
     topk_candidates: int | None = None,
     topk_block_size: int = 1,
-    wave_distribution: str = "cyclic",
-    explore_parallel_sets: bool = False,
+    wave_distribution: str = "blocked",
+    explore_parallel_sets: bool = True,
 ) -> None:
     """Run the full Loom compilation pipeline.
 
@@ -327,12 +327,13 @@ def run_pipeline(
         around each solver-selected block-size assignment.
     wave_distribution:
         How iterations of a parallel dimension larger than its cores are
-        distributed: ``"cyclic"`` (core c takes c, c + C, ...) or ``"blocked"``
-        (core c takes a contiguous range).
+        distributed: ``"blocked"`` (default; core c takes a contiguous range) or
+        ``"cyclic"`` (core c takes c, c + C, ...).
     explore_parallel_sets:
         Also explore which loops run spatially: promote perfectly nested inner
         sequential loops into the outer parallel loop and demote parallel
-        dimensions to inner sequential loops, one variant per choice.
+        dimensions to inner sequential loops, one variant per choice. On by
+        default.
     """
     if wave_distribution not in ("cyclic", "blocked"):
         raise ValueError(f"wave_distribution must be 'cyclic' or 'blocked', got {wave_distribution!r}")
