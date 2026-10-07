@@ -240,7 +240,7 @@ Options:
   --skip-mlar         Skip the loom-mlar Rust evaluator
   --skip-dataflow     Skip loom-dataflow and loom2ttkernel
   --skip-helion       Skip helion-mlir
-  --skip-ttkernel     Skip the optional loom2ttkernel backend and TTNN bindings
+  --skip-ttkernel     Skip the optional loom2ttkernel backend
   --rebuild-dataflow  Force reinstalling the loom-dataflow Python extension
   --help              Show help
 
@@ -250,25 +250,8 @@ Environment:
 ```
 
 The installer builds the standalone ADL dialect first and supplies its CMake
-package to both `loom-dataflow` and `loom2ttkernel`. After installing the pinned
-TTNN wheel, it installs `loom2ttkernel_runtime` in editable mode and compiles its
-`_native` compatibility extension using the workspace's `.venv/bin/python`.
-It then checks that the extension imports and the compatibility bindings can
-be enabled. This requires the image's `TT_METAL_HOME` checkout and
-`TT_METAL_BUILD_HOME` build artifacts. `--skip-ttkernel` (also implied by
-`--skip-dataflow`) skips these bindings.
-
-To rebuild only the compatibility bindings in an existing environment:
-
-```bash
-cd /workspace/loom
-uv pip install --python .venv/bin/python --editable third_party/loom2ttkernel
-.venv/bin/python third_party/loom2ttkernel/build_ttnn_compat.py
-.venv/bin/python -c 'from loom2ttkernel_runtime import _native, enable; enable()'
-```
-
-Run generated TTNN hosts with that same `.venv/bin/python`.
-Build products made with another toolchain can be removed automatically:
+package to both `loom-dataflow` and `loom2ttkernel`. Build products made with
+another toolchain can be removed automatically:
 
 ```bash
 bash install-docker.sh --clean
