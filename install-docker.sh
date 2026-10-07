@@ -10,7 +10,7 @@
 #   --skip-mlar         Skip the loom-mlar Rust evaluator
 #   --skip-dataflow     Skip loom-dataflow and loom2ttkernel
 #   --skip-helion       Skip helion-mlir
-#   --skip-ttkernel     Skip the optional loom2ttkernel backend
+#   --skip-ttkernel     Skip the optional loom2ttkernel backend and TTNN bindings
 #   --rebuild-dataflow  Force reinstalling the loom-dataflow Python extension
 #   --help              Show this help
 #
@@ -341,6 +341,17 @@ if [ -d /opt/loom/wheels ]; then
     run_uv pip install --python "$REPO_ROOT/.venv/bin/python" \
         "${TTNN_WHEELS[0]}"
     run_uv run --project "$REPO_ROOT" --no-sync python -c 'import ttnn; print(ttnn.__file__)'
+fi
+
+if [ "$SKIP_TTKERNEL" = "0" ]; then
+    echo ""
+    echo "=== Installing loom2ttkernel TTNN compatibility bindings ==="
+    run_uv pip install --python "$REPO_ROOT/.venv/bin/python" \
+        --editable "$REPO_ROOT/third_party/loom2ttkernel"
+    "$REPO_ROOT/.venv/bin/python" \
+        "$REPO_ROOT/third_party/loom2ttkernel/build_ttnn_compat.py"
+    "$REPO_ROOT/.venv/bin/python" -c \
+        'from loom2ttkernel_runtime import _native, enable; enable(); print("loom2ttkernel TTNN bindings OK")'
 fi
 
 echo ""
