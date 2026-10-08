@@ -127,6 +127,8 @@ def _solve_variant_on_grid(
     for exprs, divisible in ((seq_iter_exprs, True), (temp_iter_exprs, False)):
         for raw in exprs:
             node = parse_expr(raw)
+            if isinstance(node, Const) and node.value >= 1:
+                continue  # fixed trip count: no block-size constraint
             if not isinstance(node, Div):
                 raise GridUnsupported("trip count is not a Div")
             numerator, denoms = SolverContext._flatten_div_chain(node)

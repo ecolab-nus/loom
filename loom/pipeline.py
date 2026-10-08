@@ -90,12 +90,13 @@ def run_step_1_exploration(
     skip_etg: bool = False,
     blocked_waves: bool = True,
     explore_parallel_sets: bool = True,
+    split_floordiv: bool = True,
 ) -> tuple[str, str]:
     """Step 1: Exploration pipeline (stages 0→5) via pybind11.
 
     If ``skip_etg`` is True, ETG generation is disabled and no ETG file is written.
-    ``blocked_waves`` and ``explore_parallel_sets`` select the spatial-mapping
-    options (see ``run_pipeline``).
+    ``blocked_waves``, ``explore_parallel_sets`` and ``split_floordiv`` select
+    the spatial-mapping options (see ``run_pipeline``).
     """
     logging.info("")
     logging.info("=" * 72)
@@ -124,6 +125,7 @@ def run_step_1_exploration(
             # spatial_reuse=False
             blocked_waves=blocked_waves,
             explore_parallel_sets=explore_parallel_sets,
+            split_floordiv=split_floordiv,
         )
         if not skip_etg:
             exploration_etg.write_text(etg_json_text)
@@ -251,6 +253,7 @@ def run_step_4_materialization(
     explored_mlir: str,
     block_sizes: dict[str, Any],
     ir_dir: Path,
+    hoist_invariant_loads: bool = True,
 ) -> None:
     """Step 4: Materialization pipeline (stages 5→7) via pybind11."""
     logging.info("")
@@ -271,6 +274,7 @@ def run_step_4_materialization(
         final_mlir = run_materialization(
             input_mlir=explored_mlir,
             block_sizes_json=json.dumps(materialization_input),
+            hoist_invariant_loads=hoist_invariant_loads,
         )
         p03.write_text(final_mlir)
 
@@ -294,6 +298,8 @@ def run_pipeline(
     topk_block_size: int = 1,
     wave_distribution: str = "blocked",
     explore_parallel_sets: bool = True,
+    split_floordiv: bool = True,
+    hoist_invariant_loads: bool = True,
 ) -> None:
     """Run the full Loom compilation pipeline.
 
@@ -334,6 +340,18 @@ def run_pipeline(
         sequential loops into the outer parallel loop and demote parallel
         dimensions to inner sequential loops, one variant per choice. On by
         default.
+    split_floordiv:
+        With ``explore_parallel_sets``, also explore loops split where their
+        index is used as ``index // K`` (K dividing the trip count): a loop
+        over groups and a loop over the K members, so loads indexed by the
+        group (e.g. mamba's ``h // heads_per_group``) can be shared across the
+        members. The cost model picks among split and unsplit variants. On by
+        default.
+    hoist_invariant_loads:
+        After materialization, in each perfect nest of loops with independent
+        iterations (from parallel-set exploration), swap innermost the loop
+        whose invariant DRAM loads save the most traffic and read those loads
+        once per its run instead of every iteration. On by default.
     """
     if wave_distribution not in ("cyclic", "blocked"):
         raise ValueError(f"wave_distribution must be 'cyclic' or 'blocked', got {wave_distribution!r}")
@@ -358,6 +376,7 @@ def run_pipeline(
         skip_etg=has_assigned_block_size and not needs_manual_etg,
         blocked_waves=wave_distribution == "blocked",
         explore_parallel_sets=explore_parallel_sets,
+        split_floordiv=split_floordiv,
     )
     del mlir_text
 
@@ -417,7 +436,9 @@ def run_pipeline(
     del etg_json_text
 
     # Step 4: Materialization
-    run_step_4_materialization(explored_mlir, block_size, ir_dir)
+    run_step_4_materialization(
+        explored_mlir, block_size, ir_dir, hoist_invariant_loads=hoist_invariant_loads
+    )
     del explored_mlir
 
     if debug:

@@ -85,7 +85,7 @@ class Profiler:
 profiler = Profiler()
 
 
-KERNELS_DIR = Path(__file__).resolve().parent / "kernels"
+KERNELS_DIR = Path(os.environ.get("LOOM_KERNELS_DIR", Path(__file__).resolve().parent / "kernels"))
 sys.path.insert(0, str(KERNELS_DIR))
 
 import host_ttnn as generated_host_ttnn

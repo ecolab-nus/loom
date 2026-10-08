@@ -126,6 +126,16 @@ class LoomKernel:
     ``explore_parallel_sets: bool``
         Also explore which loops run spatially (see ``run_pipeline``); on by
         default. Overridden by the config key and ``--[no-]explore-parallel-sets``.
+
+    ``split_floordiv: bool``
+        With ``explore_parallel_sets``, also explore loops split at ``// K``
+        boundaries (see ``run_pipeline``); on by default. Overridden by the
+        config key and ``--[no-]split-floordiv``.
+
+    ``hoist_invariant_loads: bool``
+        Read loop-invariant DRAM tiles once per independent loop nest (see
+        ``run_pipeline``); on by default. Overridden by the config key and
+        ``--[no-]hoist-invariant-loads``.
     """
 
     # Override in subclass for a nicer description in --help.
@@ -137,6 +147,8 @@ class LoomKernel:
     # Spatial-mapping options (see run_pipeline).
     wave_distribution: ClassVar[str] = "blocked"
     explore_parallel_sets: ClassVar[bool] = True
+    split_floordiv: ClassVar[bool] = True
+    hoist_invariant_loads: ClassVar[bool] = True
 
     # ------------------------------------------------------------------ #
     # Subclass interface                                                   #
@@ -251,6 +263,22 @@ class LoomKernel:
             help="Also explore which loops run spatially (default: config "
             "'explore_parallel_sets', else the kernel's setting, else on).",
         )
+        parser.add_argument(
+            "--split-floordiv",
+            action=argparse.BooleanOptionalAction,
+            default=None,
+            help="With parallel-set exploration, also explore loops split at index // K "
+            "boundaries so group-indexed loads can be shared (default: config "
+            "'split_floordiv', else the kernel's setting, else on).",
+        )
+        parser.add_argument(
+            "--hoist-invariant-loads",
+            action=argparse.BooleanOptionalAction,
+            default=None,
+            help="Read loop-invariant DRAM tiles once per independent loop nest instead of "
+            "every iteration (default: config 'hoist_invariant_loads', else the kernel's "
+            "setting, else on).",
+        )
         return parser
 
     @classmethod
@@ -333,6 +361,16 @@ class LoomKernel:
                 args.explore_parallel_sets
                 if args.explore_parallel_sets is not None
                 else bool(config_data.get("explore_parallel_sets", cls.explore_parallel_sets))
+            ),
+            split_floordiv=(
+                args.split_floordiv
+                if args.split_floordiv is not None
+                else bool(config_data.get("split_floordiv", cls.split_floordiv))
+            ),
+            hoist_invariant_loads=(
+                args.hoist_invariant_loads
+                if args.hoist_invariant_loads is not None
+                else bool(config_data.get("hoist_invariant_loads", cls.hoist_invariant_loads))
             ),
         )
 
