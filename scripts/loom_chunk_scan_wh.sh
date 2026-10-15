@@ -5,7 +5,7 @@
 # Per shape:
 #   1. kernels/mamba_chunk_scan.py   -> test/loom_chunk_scan_wh/<cfg>/IRs/p03_bufferized.mlir
 #   2. lower.sh on the best variant  -> test/loom_chunk_scan_wh/<cfg>/kernels/
-#   3. copy kernels to tests/kernels/ (host_chunk_scan.py imports host_ttnn.py from there)
+#   3. host loads each shape's kernels through LOOM_KERNELS_DIR
 #   4. tt-smi reset + tests/host_chunk_scan.py <cfg>
 #
 # Logs: tmp_logs/loom_chunk_scan_wh/<cfg>.log holds only the host_chunk_scan.py output;
@@ -25,7 +25,7 @@
 #   SKIP_COMPILE=1  reuse existing test/loom_chunk_scan_wh/<cfg>/kernels
 #   CONFIGS="..."   space-separated subset of shapes to run
 
-set -u
+set -uo pipefail
 
 REPO_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "${REPO_ROOT}"
@@ -39,12 +39,14 @@ GRID_X="${GRID_X:-8}"
 GRID_Y="${GRID_Y:-8}"
 BATCH=2
 
-PYTHON="${REPO_ROOT}/.venv/bin/python"
+PYTHON="${PYTHON:-${REPO_ROOT}/.venv/bin/python}"
 TT_SMI="${TT_SMI:-/root/.tenstorrent-venv/bin/tt-smi}"
 HW_SPEC="third_party/loom-mlar/tests/${ARCH}/2d_mesh_torus.mlir"
 OUT_ROOT="${REPO_ROOT}/test/loom_chunk_scan_wh"
 LOG_DIR="${REPO_ROOT}/tmp_logs/loom_chunk_scan_wh"
-HOST_KERNELS_DIR="${REPO_ROOT}/tests/kernels"
+
+echo "Artifacts: ${OUT_ROOT}"
+echo "Logs: ${LOG_DIR}"
 
 if [[ ! -f "${HW_SPEC}" ]]; then
   echo "${HW_SPEC} not found (run scripts/build-mlar.sh)" >&2
@@ -56,7 +58,7 @@ export LD_LIBRARY_PATH="/opt/tt-mlir/build/lib:/opt/ttmlir-toolchain/lib:${TT_ME
 export PYTHONPATH="${TT_METAL_HOME}${PYTHONPATH:+:${PYTHONPATH}}"
 export TT_VISIBLE_DEVICES="${CARD}"
 
-mkdir -p "${LOG_DIR}" "${HOST_KERNELS_DIR}"
+mkdir -p "${LOG_DIR}" || exit 1
 
 configs=(
 L4096_N64_H128_G4_D128_C128
@@ -85,9 +87,9 @@ extract_best_variant() {
 
 compile_cfg() {
   local cfg="$1" out="${OUT_ROOT}/$1"
-  mkdir -p "${out}"
+  mkdir -p "${out}" || return 1
   # Drop artifacts of earlier runs so a failed step cannot fall back to stale MLIR/kernels.
-  rm -rf "${out}/IRs" "${out}/ttkernel" "${out}/kernels"
+  rm -rf "${out}/IRs" "${out}/ttkernel" "${out}/kernels" || return 1
 
   "${PYTHON}" kernels/mamba_chunk_scan.py \
     --config kernels/config_files/mamba_chunk_scan.json \
@@ -117,14 +119,23 @@ semantic_args() {
 
 run_on_card() {
   local cfg="$1" args="$2"
+  local -a extra_args=()
+  read -r -a extra_args <<< "${args}"
   "${TT_SMI}" -r "${CARD}" > /dev/null 2>&1 && \
-  timeout 1200s "${PYTHON}" tests/host_chunk_scan.py "${cfg}" \
-    --perf_target mlir \
+  LOOM_KERNELS_DIR="${OUT_ROOT}/${cfg}/kernels" \
+    timeout --kill-after=10s 1200s "${PYTHON}" tests/host_chunk_scan.py "${cfg}" \
+    --perf_target mlir --raise_on_fail \
     --grid_x "${GRID_X}" --grid_y "${GRID_Y}" \
-    ${args}
+    "${extra_args[@]}"
 }
 
+failed=0
 for cfg in "${configs[@]}"; do
+  if [[ ! "${cfg}" =~ ^L[0-9]+_N[0-9]+_H[0-9]+_G[0-9]+_D[0-9]+_C[0-9]+$ ]]; then
+    echo "Invalid shape: ${cfg}" >&2
+    failed=1
+    continue
+  fi
   echo "Running ${cfg}..."
   # The per-shape log holds only host_chunk_scan.py output.
   log="${LOG_DIR}/${cfg}.log"
@@ -132,17 +143,20 @@ for cfg in "${configs[@]}"; do
   if [[ "${SKIP_COMPILE}" != "1" ]]; then
     if ! compile_cfg "${cfg}" > "${LOG_DIR}/${cfg}_compile.log" 2>&1; then
       echo "Compile failed: ${cfg}"
+      failed=1
       continue
     fi
   fi
 
-  if ! cp -f "${OUT_ROOT}/${cfg}/kernels/"*.{cpp,py} "${HOST_KERNELS_DIR}/" 2> /dev/null; then
+  if [[ ! -f "${OUT_ROOT}/${cfg}/kernels/host_ttnn.py" ]]; then
     echo "Missing kernels: ${cfg}"
+    failed=1
     continue
   fi
 
-  if ! sem_args="$(semantic_args "${HOST_KERNELS_DIR}")"; then
+  if ! sem_args="$(semantic_args "${OUT_ROOT}/${cfg}/kernels")"; then
     echo "Cannot read tile_m from kernels: ${cfg}"
+    failed=1
     continue
   fi
   echo "  host args: ${sem_args} ${HOST_ARGS}"
@@ -152,9 +166,13 @@ for cfg in "${configs[@]}"; do
 
   if [ $ret -eq 124 ]; then
     echo "Timeout: ${cfg}"
+    failed=1
   elif [ $ret -ne 0 ]; then
     echo "Failed: ${cfg}"
+    failed=1
   else
     echo "Finished: ${cfg}  $(grep -E '^Result:' "${log}" | tail -1)"
   fi
 done
+
+exit "${failed}"

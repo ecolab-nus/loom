@@ -44,7 +44,10 @@ for ARCH in "${ARCHS[@]}"; do
     fi
 
     echo "Building $ARCH hw_spec + eval_system (this may take a while on first run)..."
-    cargo test --test "$ARCH" --release -- --nocapture \
+    # The evaluator generator builds a temporary Cargo project and copies its
+    # binary from that project's target/release directory. An inherited
+    # CARGO_TARGET_DIR redirects the nested build and makes that copy fail.
+    env -u CARGO_TARGET_DIR cargo test --test "$ARCH" --release -- --nocapture \
         test_export_2d_mesh_torus_mlir test_generate_system_evaluator_binary
 
     GENERATED="$MLAR_DIR/tests/$ARCH/bin/eval_system"
