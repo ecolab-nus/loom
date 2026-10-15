@@ -1,12 +1,23 @@
 """ETG variant resolution logic using the MLAR evaluator."""
 
-import copy
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from .core import resolve_schedule
 
 
+def _has_empty_scenarios(node) -> bool:
+    if isinstance(node, dict):
+        if "scenarios" in node and not node["scenarios"]:
+            return True
+        return any(_has_empty_scenarios(v) for v in node.values())
+    if isinstance(node, list):
+        return any(_has_empty_scenarios(item) for item in node)
+    return False
+
+
 def validate_scenarios(node, path: str = "") -> list[str]:
+    if not _has_empty_scenarios(node):
+        return []
     issues: list[str] = []
     if isinstance(node, dict):
         if "scenarios" in node and not node["scenarios"]:
@@ -20,7 +31,8 @@ def validate_scenarios(node, path: str = "") -> list[str]:
 
 
 def _resolve_single_variant(variant: dict, evaluator_path=None) -> dict:
-    return resolve_schedule(copy.deepcopy(variant), evaluator_path)
+    # resolve_schedule rebuilds every node it changes, so the input is not mutated.
+    return resolve_schedule(variant, evaluator_path)
 
 
 def resolve_etg_variants(

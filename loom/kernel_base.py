@@ -117,6 +117,25 @@ class LoomKernel:
     ``tile_upper_bounds: dict[str | int, int] | None``
         Optional per-tile upper-bound overrides passed to
         ``helion_mlir.generate_mlir``.
+
+    ``wave_distribution: str``
+        ``"blocked"`` (default) or ``"cyclic"``: how iterations of a parallel
+        dimension larger than its cores are spread over the cores. Overridden
+        by the config key ``wave_distribution`` and ``--wave-distribution``.
+
+    ``explore_parallel_sets: bool``
+        Also explore which loops run spatially (see ``run_pipeline``); on by
+        default. Overridden by the config key and ``--[no-]explore-parallel-sets``.
+
+    ``split_floordiv: bool``
+        With ``explore_parallel_sets``, also explore loops split at ``// K``
+        boundaries (see ``run_pipeline``); on by default. Overridden by the
+        config key and ``--[no-]split-floordiv``.
+
+    ``hoist_invariant_loads: bool``
+        Read loop-invariant DRAM tiles once per independent loop nest (see
+        ``run_pipeline``); on by default. Overridden by the config key and
+        ``--[no-]hoist-invariant-loads``.
     """
 
     # Override in subclass for a nicer description in --help.
@@ -125,6 +144,11 @@ class LoomKernel:
     assume_divisible: ClassVar[bool] = False
     tile_divisible: ClassVar[dict[str | int, bool] | None] = None
     tile_upper_bounds: ClassVar[dict[str | int, int] | None] = None
+    # Spatial-mapping options (see run_pipeline).
+    wave_distribution: ClassVar[str] = "blocked"
+    explore_parallel_sets: ClassVar[bool] = True
+    split_floordiv: ClassVar[bool] = True
+    hoist_invariant_loads: ClassVar[bool] = True
 
     # ------------------------------------------------------------------ #
     # Subclass interface                                                   #
@@ -225,6 +249,36 @@ class LoomKernel:
             metavar="K",
             help="Materialize K local block-size samples per symbol around each selected candidate.",
         )
+        parser.add_argument(
+            "--wave-distribution",
+            choices=("cyclic", "blocked"),
+            default=None,
+            help="Distribute wave-loop iterations to cores cyclically or in contiguous blocks "
+            "(default: config 'wave_distribution', else the kernel's setting, else blocked).",
+        )
+        parser.add_argument(
+            "--explore-parallel-sets",
+            action=argparse.BooleanOptionalAction,
+            default=None,
+            help="Also explore which loops run spatially (default: config "
+            "'explore_parallel_sets', else the kernel's setting, else on).",
+        )
+        parser.add_argument(
+            "--split-floordiv",
+            action=argparse.BooleanOptionalAction,
+            default=None,
+            help="With parallel-set exploration, also explore loops split at index // K "
+            "boundaries so group-indexed loads can be shared (default: config "
+            "'split_floordiv', else the kernel's setting, else on).",
+        )
+        parser.add_argument(
+            "--hoist-invariant-loads",
+            action=argparse.BooleanOptionalAction,
+            default=None,
+            help="Read loop-invariant DRAM tiles once per independent loop nest instead of "
+            "every iteration (default: config 'hoist_invariant_loads', else the kernel's "
+            "setting, else on).",
+        )
         return parser
 
     @classmethod
@@ -298,6 +352,26 @@ class LoomKernel:
             assigned_block_size=assigned_block_size if has_assigned_block_size else None,
             topk_candidates=args.topk_candidates,
             topk_block_size=args.topk_block_size,
+            wave_distribution=(
+                args.wave_distribution
+                or config_data.get("wave_distribution")
+                or cls.wave_distribution
+            ),
+            explore_parallel_sets=(
+                args.explore_parallel_sets
+                if args.explore_parallel_sets is not None
+                else bool(config_data.get("explore_parallel_sets", cls.explore_parallel_sets))
+            ),
+            split_floordiv=(
+                args.split_floordiv
+                if args.split_floordiv is not None
+                else bool(config_data.get("split_floordiv", cls.split_floordiv))
+            ),
+            hoist_invariant_loads=(
+                args.hoist_invariant_loads
+                if args.hoist_invariant_loads is not None
+                else bool(config_data.get("hoist_invariant_loads", cls.hoist_invariant_loads))
+            ),
         )
 
 

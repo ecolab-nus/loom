@@ -8,7 +8,7 @@ from typing import Optional, Union
 import cpmpy as cp
 
 from .cpmpy_expr_resolver import ExprResolver
-from ...loom_utils.ast import Constraint, Expr, Div, parse_expr
+from ...loom_utils.ast import Constraint, Const, Expr, Div, parse_expr
 
 
 class SolverContext:
@@ -106,6 +106,10 @@ class SolverContext:
         for i, raw in enumerate(trip_count_exprs):
             label = labels[i] if labels is not None else f"trip_count[{i}]"
             node = parse_expr(raw)
+            if isinstance(node, Const) and node.value >= 1:
+                # Fixed trip count (e.g. a loop split at index // K): it does
+                # not depend on any block size, so it constrains nothing.
+                continue
             if not isinstance(node, Div):
                 raise ValueError(
                     f"Expected top-level Div node in {label}, "

@@ -47,6 +47,11 @@ def find_evaluator(hw_spec: Path | str | None = None) -> Path | None:
 
 _DEFAULT_EVALUATOR = find_evaluator()
 
+# Raw evaluator stdout keyed by (binary, input JSON). Variants share most leaf
+# Sequentials, so this skips the bulk of the subprocess calls; each hit is
+# re-parsed so callers never share result objects.
+_EVAL_CACHE: dict[tuple[str, str], str] = {}
+
 
 def evaluate_schedule(
     schedule: dict,
@@ -63,15 +68,20 @@ def evaluate_schedule(
     if not binary.exists():
         raise FileNotFoundError(f"Evaluator binary not found: {binary}")
 
-    result = subprocess.run(
-        [str(binary)],
-        input=json.dumps(schedule),
-        stdout=subprocess.PIPE,
-        stderr=None,
-        text=True,
-        check=True,
-    )
-    return json.loads(result.stdout)
+    payload = json.dumps(schedule)
+    key = (str(binary), payload)
+    stdout = _EVAL_CACHE.get(key)
+    if stdout is None:
+        stdout = subprocess.run(
+            [str(binary)],
+            input=payload,
+            stdout=subprocess.PIPE,
+            stderr=None,
+            text=True,
+            check=True,
+        ).stdout
+        _EVAL_CACHE[key] = stdout
+    return json.loads(stdout)
 
 
 def _fill_func_scenarios(schedules, *, evaluator_path=None):

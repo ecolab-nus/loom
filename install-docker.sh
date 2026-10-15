@@ -10,7 +10,7 @@
 #   --skip-mlar         Skip the loom-mlar Rust evaluator
 #   --skip-dataflow     Skip loom-dataflow and loom2ttkernel
 #   --skip-helion       Skip helion-mlir
-#   --skip-ttkernel     Skip the optional loom2ttkernel backend
+#   --skip-ttkernel     Skip the optional loom2ttkernel backend and TTNN bindings
 #   --rebuild-dataflow  Force reinstalling the loom-dataflow Python extension
 #   --help              Show this help
 #
@@ -246,6 +246,12 @@ run_uv() {
     env -u VIRTUAL_ENV uv "$@"
 }
 
+# Keep uv and compiler configuration on the same checkout-local Python, even
+# when the shell inherits the Docker toolchain venv or another project venv.
+export UV_PROJECT_ENVIRONMENT="$REPO_ROOT/.venv"
+export UV_PYTHON=3.10
+LOOM_PYTHON="$UV_PROJECT_ENVIRONMENT/bin/python"
+
 echo ""
 echo "=== Initializing Git submodules ==="
 if [ -f "$REPO_ROOT/third_party/loom-dataflow/CMakeLists.txt" ] \
@@ -278,7 +284,30 @@ else
     run_uv "${UV_BASE_ARGS[@]}"
 fi
 
+export VIRTUAL_ENV="$UV_PROJECT_ENVIRONMENT"
+export PATH="$VIRTUAL_ENV/bin:$PATH"
+"$LOOM_PYTHON" -c 'import sys; assert sys.version_info[:2] == (3, 10), sys.version; print("  Loom Python:", sys.executable, sys.version.split()[0])'
+
 if [ "$SKIP_DATAFLOW" = "0" ]; then
+    # The standalone CMake build runs before uv builds loom-dataflow. Install
+    # its build-system requirements here, then also use this environment for
+    # the Python extension instead of a temporary isolated build environment.
+    echo ""
+    echo "=== Installing loom-dataflow build dependencies ==="
+    run_uv pip install --python "$LOOM_PYTHON" \
+        'scikit-build-core>=0.10' 'pybind11>=2.12' 'nanobind==2.9'
+    PYBIND11_CMAKE_DIR="$("$LOOM_PYTHON" -m pybind11 --cmakedir)"
+    NANOBIND_CMAKE_DIR="$("$LOOM_PYTHON" -m nanobind --cmake_dir)"
+    # FindPython also caches headers and libraries; discard them when moving
+    # an existing build from the Docker Python 3.12 environment to Python 3.10.
+    DATAFLOW_PYTHON_ARGS=(
+        -U '*Python*' -U 'pybind11*' -U 'nanobind*' -U NB_DIR
+        "-DPython3_EXECUTABLE:FILEPATH=$LOOM_PYTHON"
+        "-DPython_EXECUTABLE:FILEPATH=$LOOM_PYTHON"
+        "-Dpybind11_DIR:PATH=$PYBIND11_CMAKE_DIR"
+        "-Dnanobind_DIR:PATH=$NANOBIND_CMAKE_DIR"
+    )
+
     ADL_SOURCE_DIR="$REPO_ROOT/third_party/adl-dialect"
     ADL_BUILD_DIR="$ADL_SOURCE_DIR/build"
     ADL_INSTALL_DIR="$ADL_BUILD_DIR/install"
@@ -297,17 +326,29 @@ if [ "$SKIP_DATAFLOW" = "0" ]; then
 
     echo ""
     echo "=== Building loom-dataflow CMake artifacts ==="
-    bash "$REPO_ROOT/third_party/loom-dataflow/build.sh" \
-        --mlir-dir="$MLIR_DIR" \
-        --adl-dialect-dir="$ADLDialect_DIR"
+    DATAFLOW_SOURCE_DIR="$REPO_ROOT/third_party/loom-dataflow"
+    cmake -S "$DATAFLOW_SOURCE_DIR" -B "$DATAFLOW_SOURCE_DIR/build" -G Ninja \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DMLIR_DIR="$MLIR_DIR" \
+        -DADLDialect_DIR="$ADLDialect_DIR" \
+        -DLLVM_EXTERNAL_LIT="$VIRTUAL_ENV/bin/lit" \
+        -DLLVM_USE_LINKER=lld \
+        "${DATAFLOW_PYTHON_ARGS[@]}"
+    cmake --build "$DATAFLOW_SOURCE_DIR/build" --config Release
 
     echo ""
     echo "=== Installing the loom-dataflow Python extension ==="
-    DATAFLOW_SYNC_ARGS=("${UV_BASE_ARGS[@]}" --extra dataflow)
+    # Explicit paths override Python/package paths cached by previous builds.
+    DATAFLOW_CMAKE_ARGS="$("$LOOM_PYTHON" -c \
+        'import shlex, sys; print(shlex.join(sys.argv[1:]))' \
+        "${DATAFLOW_PYTHON_ARGS[@]}")"
+    DATAFLOW_SYNC_ARGS=("${UV_BASE_ARGS[@]}" --extra dataflow
+        --no-build-isolation-package loom-dataflow)
     if [ "$REBUILD_DATAFLOW" = "1" ]; then
         DATAFLOW_SYNC_ARGS+=(--reinstall-package loom-dataflow)
     fi
-    run_uv "${DATAFLOW_SYNC_ARGS[@]}"
+    CMAKE_ARGS="${CMAKE_ARGS:+$CMAKE_ARGS }$DATAFLOW_CMAKE_ARGS" \
+        run_uv "${DATAFLOW_SYNC_ARGS[@]}"
 fi
 
 if [ "$SKIP_MLAR" = "0" ]; then
@@ -341,6 +382,17 @@ if [ -d /opt/loom/wheels ]; then
     run_uv pip install --python "$REPO_ROOT/.venv/bin/python" \
         "${TTNN_WHEELS[0]}"
     run_uv run --project "$REPO_ROOT" --no-sync python -c 'import ttnn; print(ttnn.__file__)'
+fi
+
+if [ "$SKIP_TTKERNEL" = "0" ]; then
+    echo ""
+    echo "=== Installing loom2ttkernel TTNN compatibility bindings ==="
+    run_uv pip install --python "$REPO_ROOT/.venv/bin/python" \
+        --editable "$REPO_ROOT/third_party/loom2ttkernel"
+    "$REPO_ROOT/.venv/bin/python" \
+        "$REPO_ROOT/third_party/loom2ttkernel/build_ttnn_compat.py"
+    "$REPO_ROOT/.venv/bin/python" -c \
+        'from loom2ttkernel_runtime import _native, enable; enable(); print("loom2ttkernel TTNN bindings OK")'
 fi
 
 echo ""

@@ -11,10 +11,11 @@
 # Logs: tmp_logs/loom_chunk_scan_bh/<cfg>.log holds only the host_chunk_scan.py output;
 # compile/lowering output goes to <cfg>_compile.log next to it.
 #
-# The check targets Helion semantics: the causal loop is block-causal with granularity tile_m
-# (the solver guarantees tile_k | tile_m), so the host reference runs with --block_size <tile_m>
-# read from the generated kernel. The host only accepts block sizes that are multiples of 64; for
-# other tile_m the script falls back to --tril_cb, where every block granularity gives the same result.
+# The host always runs with --tril_cb. The kernel's causal loop is block-causal with granularity
+# tile_m (unmasked diagonal blocks), so on a general cb its result depends on tile_m. With a
+# lower-triangular cb the extra terms are exactly zero and every tile_m gives the exact causal
+# result, so all Loom/TileLoom kernels (any tile_m, WH or BH) are checked against the same function
+# and their latencies are directly comparable. Larger tile_m still does more (zero) work.
 #
 # Env overrides:
 #   CARD=0|1        card to use (default 0)
@@ -104,16 +105,14 @@ compile_cfg() {
     ./third_party/loom2ttkernel/lower.sh "${out}/IRs/p03_best.mlir" 1
 }
 
-# host_chunk_scan.py args that make its reference match the kernel's Helion semantics.
+# host_chunk_scan.py args that make every kernel's result independent of its tile_m (see header).
+# tile_m is read from the generated kernel only to log it next to the result.
 semantic_args() {
   local tile_m
   tile_m="$(grep -m1 -o '^run = .*' "$1/host_ttnn.py" | grep -o 'tile_m[0-9]*' | grep -o '[0-9]*')"
   [[ -n "${tile_m}" ]] || return 1
-  if (( tile_m % 64 == 0 )); then
-    echo "--block_size ${tile_m}"
-  else
-    echo "--tril_cb"
-  fi
+  echo "--tril_cb"
+  echo "  tile_m: ${tile_m}" >&2
 }
 
 run_on_card() {
