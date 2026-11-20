@@ -90,10 +90,15 @@ def run_step_1_exploration(
     skip_etg: bool = False,
     explicit_memory: bool = False,
     enumerate_bindings: bool = False,
+    blocked_waves: bool = True,
+    explore_parallel_sets: bool = True,
+    split_floordiv: bool = True,
 ) -> tuple[str, str]:
     """Step 1: Exploration pipeline (stages 0→5) via pybind11.
 
     If ``skip_etg`` is True, ETG generation is disabled and no ETG file is written.
+    ``blocked_waves``, ``explore_parallel_sets`` and ``split_floordiv`` select
+    the spatial-mapping options (see ``run_pipeline``).
     """
     logging.info("")
     logging.info("=" * 72)
@@ -122,6 +127,9 @@ def run_step_1_exploration(
             explicit_memory=explicit_memory,
             enumerate_bindings=enumerate_bindings,
             # spatial_reuse=False
+            blocked_waves=blocked_waves,
+            explore_parallel_sets=explore_parallel_sets,
+            split_floordiv=split_floordiv,
         )
         if not skip_etg:
             exploration_etg.write_text(etg_json_text)
@@ -132,26 +140,68 @@ def run_step_1_exploration(
     return explored_mlir, etg_json_text
 
 
-def run_step_2_etg_resolution(
+def prune_infeasible_variants(
     etg_json_text: str,
+    constraints_dir: Path,
+    debug: bool,
+    symbol_domains: dict[str, list[int]] | None = None,
+) -> tuple[list[dict[str, Any]], dict[str, list[int]]]:
+    """Drop variants whose loop trip counts no block size can satisfy.
+
+    The solver would report these INFEASIBLE; removing them up front skips
+    their ETG resolution and solving. Returns the kept variants and the symbol
+    domains derived from all variants, which Step 3 must use so that pruning
+    cannot change the domains it would have derived.
+    """
+    from loom.loom_utils.modeling import derive_domains_from_etg  # noqa: PLC0415
+    from loom.solver import find_unsatisfiable_trip_count  # noqa: PLC0415
+
+    variants = json.loads(etg_json_text)
+    domains = {**derive_domains_from_etg(variants), **(symbol_domains or {})}
+    kept, pruned = [], []
+    for variant in variants:
+        reason = find_unsatisfiable_trip_count(variant, domains)
+        if reason is None:
+            kept.append(variant)
+        else:
+            pruned.append(f"{variant.get('variant_name', '?')}  {reason}")
+
+    logging.info(f"Pruned {len(pruned)}/{len(variants)} variant(s) with unsatisfiable trip counts.")
+    if debug and pruned:
+        (constraints_dir / "p01_pruned_variants.txt").write_text("\n".join(pruned) + "\n")
+    if not kept:
+        logging.error("All variants UNSAT. No feasible block sizes. Aborting.")
+        sys.exit(1)
+    return kept, domains
+
+
+def run_step_2_etg_resolution(
+    etg_variants: str | list[dict[str, Any]],
     njobs: int,
     constraints_dir: Path,
+    hw_spec: str | Path | None = None,
 ) -> list[dict[str, Any]]:
-    """Step 2: ETG resolution via MLAR Rust evaluator."""
+    """Step 2: ETG resolution via MLAR Rust evaluator.
+
+    The evaluator is the ``eval_system`` generated next to *hw_spec*, so the
+    cost model always matches the hardware description.
+    """
     logging.info("")
     logging.info("=" * 72)
     logging.info("STEP 2: ETG RESOLUTION (MLAR evaluator)")
     logging.info("=" * 72)
 
-    from loom.loom_utils.mlar import resolve_etg_variants  # noqa: PLC0415
+    from loom.loom_utils.mlar import find_evaluator, resolve_etg_variants  # noqa: PLC0415
     from loom.loom_utils.io import smart_json_dumps  # noqa: PLC0415
 
     resolved_etg = constraints_dir / "p02_resolved_etg.json"
+    evaluator = find_evaluator(hw_spec)
+    logging.info(f"  Evaluator : {evaluator}")
     logging.info(f"  Output : {resolved_etg}")
 
     with pipeline_timer("Step 2: ETG Resolution"):
-        variants = json.loads(etg_json_text)
-        resolved_variants = resolve_etg_variants(variants, njobs=njobs)
+        variants = json.loads(etg_variants) if isinstance(etg_variants, str) else etg_variants
+        resolved_variants = resolve_etg_variants(variants, njobs=njobs, evaluator_path=evaluator)
         resolved_etg.write_text(smart_json_dumps(resolved_variants))
 
     logging.info(f"ETG resolution complete. {len(resolved_variants)} variant(s) resolved.")
@@ -209,6 +259,7 @@ def run_step_4_materialization(
     block_sizes: dict[str, Any],
     ir_dir: Path,
     hw_spec: str,
+    hoist_invariant_loads: bool = True,
 ) -> None:
     """Step 4: Materialization pipeline (stages 5→7) via pybind11."""
     logging.info("")
@@ -230,6 +281,7 @@ def run_step_4_materialization(
             input_mlir=explored_mlir,
             block_sizes_json=json.dumps(materialization_input),
             hw_spec_file=hw_spec,
+            hoist_invariant_loads=hoist_invariant_loads,
         )
         p03.write_text(final_mlir)
 
@@ -253,6 +305,10 @@ def run_pipeline(
     topk_block_size: int = 1,
     explicit_memory: bool = False,
     enumerate_bindings: bool = False,
+    wave_distribution: str = "blocked",
+    explore_parallel_sets: bool = True,
+    split_floordiv: bool = True,
+    hoist_invariant_loads: bool = True,
 ) -> None:
     """Run the full Loom compilation pipeline.
 
@@ -289,7 +345,30 @@ def run_pipeline(
     enumerate_bindings:
         Enumerate semantically compatible processor arrays independently at
         each static compute operation before spatial exploration.
+    wave_distribution:
+        How iterations of a parallel dimension larger than its cores are
+        distributed: ``"blocked"`` (default; core c takes a contiguous range) or
+        ``"cyclic"`` (core c takes c, c + C, ...).
+    explore_parallel_sets:
+        Also explore which loops run spatially: promote perfectly nested inner
+        sequential loops into the outer parallel loop and demote parallel
+        dimensions to inner sequential loops, one variant per choice. On by
+        default.
+    split_floordiv:
+        With ``explore_parallel_sets``, also explore loops split where their
+        index is used as ``index // K`` (K dividing the trip count): a loop
+        over groups and a loop over the K members, so loads indexed by the
+        group (e.g. mamba's ``h // heads_per_group``) can be shared across the
+        members. The cost model picks among split and unsplit variants. On by
+        default.
+    hoist_invariant_loads:
+        After materialization, in each perfect nest of loops with independent
+        iterations (from parallel-set exploration), swap innermost the loop
+        whose invariant kernel-argument loads save the most traffic and read those loads
+        once per its run instead of every iteration. On by default.
     """
+    if wave_distribution not in ("cyclic", "blocked"):
+        raise ValueError(f"wave_distribution must be 'cyclic' or 'blocked', got {wave_distribution!r}")
     output_path = Path(output_path)
     ir_dir = output_path / "IRs"
     constraints_dir = output_path / "constraints"
@@ -306,12 +385,15 @@ def run_pipeline(
         skip_etg=False,
         explicit_memory=explicit_memory,
         enumerate_bindings=enumerate_bindings,
+        blocked_waves=wave_distribution == "blocked",
+        explore_parallel_sets=explore_parallel_sets,
+        split_floordiv=split_floordiv,
     )
     del mlir_text
 
     if has_assigned_block_size:
         resolved_variants = run_step_2_etg_resolution(
-            etg_json_text, njobs, constraints_dir
+            etg_json_text, njobs, constraints_dir, hw_spec
         )
         from loom.solver import (  # noqa: PLC0415
             prepare_manual_block_sizes,
@@ -340,8 +422,12 @@ def run_pipeline(
         logging.info("=" * 72)
         logging.info("Skipped due to assigned_block_size override.")
     else:
-        # Step 2: ETG resolution
-        run_step_2_etg_resolution(etg_json_text, njobs, constraints_dir)
+        # Step 2: ETG resolution (of the variants that can be feasible)
+        variants, symbol_domains = prune_infeasible_variants(
+            etg_json_text, constraints_dir, debug, symbol_domains
+        )
+        run_step_2_etg_resolution(variants, njobs, constraints_dir, hw_spec)
+        del variants
 
         # Step 3: Solver
         resolved_etg_path = constraints_dir / "p02_resolved_etg.json"
@@ -355,7 +441,10 @@ def run_pipeline(
     del etg_json_text
 
     # Step 4: Materialization
-    run_step_4_materialization(explored_mlir, block_size, ir_dir, str(hw_spec))
+    run_step_4_materialization(
+        explored_mlir, block_size, ir_dir, str(hw_spec),
+        hoist_invariant_loads=hoist_invariant_loads,
+    )
     del explored_mlir
 
     if debug:

@@ -1,8 +1,9 @@
-"""CPMpy-based block-size optimizer for Loom using Pure Python AST."""
+"""Block-size optimizer for Loom: exhaustive grid search, CPMpy/CP-SAT fallback."""
 
 import argparse
 import json
 import logging
+import os
 import re
 import sys
 from bisect import bisect_left
@@ -26,6 +27,7 @@ from ..loom_utils.ast import (
     parse_expr,
     parse_constraint,
 )
+from .core.grid_solver import GridUnsupported, grid_symbols, solve_on_grid
 from .core.solver_context import SolverContext
 
 
@@ -36,10 +38,13 @@ def solve_variant(
     domains: dict[str, list[int]],
     debug: bool = False,
 ) -> dict:
-    """Solve one variant and return a result dict."""
-    ctx = SolverContext()
-    ctx.load_symbols(variant["constraint_scope"]["metadata"]["symbols"], domains)
-    ctx.load_booleans(variant["constraint_scope"]["metadata"].get("booleans", []))
+    """Solve one variant and return a result dict.
+
+    Searches the block-size grid exhaustively when it is small enough and
+    falls back to CP-SAT otherwise (or when LOOM_SOLVER_BACKEND=cpsat). In
+    debug mode, infeasible variants are re-solved with CP-SAT to get a MUS.
+    """
+    metadata = variant["constraint_scope"]["metadata"]
 
     # Parse hard constraints directly (no ASTTransformer needed)
     hard_constraints_ast = [
@@ -50,31 +55,86 @@ def solve_variant(
         variant["constraint_scope"]["metadata"]
     )
     t_total_ast = compute_total_time_ast(variant, use_common_expr=True)
+    trip_exprs, trip_labels = _trip_counts(metadata["iter_num"])
+
+    if os.environ.get("LOOM_SOLVER_BACKEND", "grid") != "cpsat":
+        try:
+            status, min_val, assignments = _solve_variant_on_grid(
+                metadata,
+                domains,
+                hard_constraints_ast + [c for _, c in memory_constraints_ast],
+                trip_exprs,
+                t_total_ast,
+            )
+        except GridUnsupported:
+            pass
+        else:
+            if not (debug and status == "INFEASIBLE"):
+                return _variant_result(variant, index, total, status, min_val, assignments)
+
+    ctx = SolverContext()
+    ctx.load_symbols(metadata["symbols"], domains)
+    ctx.load_booleans(metadata.get("booleans", []))
 
     # Add constraints and solve
     ctx.add_hard_constraints(hard_constraints_ast)
     for memory, constraint in memory_constraints_ast:
         ctx.add_hard_constraints([constraint], label_prefix=f"memory[{memory}]")
-    ctx.add_divisibility_constraints(
-        *_trip_counts(variant["constraint_scope"]["metadata"]["iter_num"])
-    )
+    ctx.add_divisibility_constraints(trip_exprs, labels=trip_labels)
     status, scaled_min_val, assignments = ctx.find_optimum(t_total_ast)
-    min_val = scaled_min_val
 
     mus = None
     if debug and status == "INFEASIBLE":
         mus = ctx.find_mus()
 
+    return _variant_result(variant, index, total, status, scaled_min_val, assignments, mus)
+
+
+def _solve_variant_task(*args, **kwargs) -> dict:
+    """solve_variant for a worker process: the caller already holds the variant."""
+    res = solve_variant(*args, **kwargs)
+    res["variant"] = None
+    return res
+
+
+def _variant_result(variant, index, total, status, min_val, assignments, mus=None) -> dict:
     return {
         "variant": variant,
         "index": index,
         "total": total,
         "status": status,
         "min_val": min_val,
-        "scaled_min_val": scaled_min_val,
+        "scaled_min_val": min_val,
         "assignments": assignments,
         "mus": mus,
     }
+
+
+def _solve_variant_on_grid(
+    metadata: dict,
+    domains: dict[str, list[int]],
+    constraints: list,
+    trip_count_exprs: list[dict],
+    objective,
+) -> tuple[str, Optional[int], Optional[dict[str, int]]]:
+    """Same model as the CP-SAT path, searched point by point.
+
+    Ties (in practice only is_double_buffer when it does not change the cost)
+    resolve to the smallest values in symbol order.
+    """
+    symbols = grid_symbols(metadata["symbols"], metadata.get("booleans", []), domains)
+    trip_counts = []
+    for raw in trip_count_exprs:
+        node = parse_expr(raw)
+        if isinstance(node, Const) and node.value >= 1:
+            continue  # fixed trip count: no block-size constraint
+        if not isinstance(node, Div):
+            raise GridUnsupported("trip count is not a Div")
+        trip_counts.append(SolverContext._flatten_div_chain(node))
+    status, min_val, assignments, _ = solve_on_grid(
+        symbols, constraints, trip_counts, objective
+    )
+    return status, min_val, assignments
 
 
 def _trip_counts(iter_num: dict) -> tuple[list[dict], list[str]]:
@@ -86,6 +146,72 @@ def _trip_counts(iter_num: dict) -> tuple[list[dict], list[str]]:
     ]
     tiled = [(raw, label) for label, raw in entries if "Const" not in raw]
     return [raw for raw, _ in tiled], [label for _, label in tiled]
+
+
+_PREFILTER_MAX_COMBOS = 1 << 16
+
+
+def _symbols_in(expr: object, out: set[str]) -> set[str]:
+    if isinstance(expr, dict):
+        if "Sym" in expr and isinstance(expr["Sym"], str):
+            out.add(expr["Sym"])
+        for value in expr.values():
+            _symbols_in(value, out)
+    elif isinstance(expr, list):
+        for value in expr:
+            _symbols_in(value, out)
+    return out
+
+
+def _trip_count_satisfiable(raw: dict, domains: dict[str, list[int]]) -> bool:
+    """Whether some domain assignment divides this trip count exactly.
+
+    Mirrors SolverContext.add_divisibility_constraints. Returns True whenever
+    the check cannot be decided cheaply, so it never rejects a feasible variant.
+    """
+    node = parse_expr(raw)
+    if not isinstance(node, Div):
+        return True
+    numerator, denoms = SolverContext._flatten_div_chain(node)
+    names = sorted(_symbols_in(raw, set()))
+    if any(name not in domains for name in names):
+        return True
+    n_combos = 1
+    for name in names:
+        n_combos *= len(domains[name])
+    if n_combos > _PREFILTER_MAX_COMBOS:
+        return True
+    for values in product(*(domains[name] for name in names)):
+        env = dict(zip(names, values))
+        try:
+            den = 1
+            for d in denoms:
+                den *= d.eval(env)
+            if numerator.eval(env) % den == 0:
+                return True
+        except (ArithmeticError, KeyError):
+            return True
+    return False
+
+
+def find_unsatisfiable_trip_count(
+    variant: dict,
+    domains: dict[str, list[int]],
+) -> Optional[str]:
+    """Label of an iter_num trip count no in-domain block size divides, or None.
+
+    Such a variant is INFEASIBLE in solve_variant regardless of its cost model,
+    so callers can drop it before ETG resolution and solving.
+    """
+    metadata = variant["constraint_scope"]["metadata"]
+    domains = {
+        **domains,
+        **{name: [0, 1] for name in metadata.get("booleans", [])},
+    }
+    for raw, label in zip(*_trip_counts(metadata["iter_num"])):
+        if not _trip_count_satisfiable(raw, domains):
+            return label
+    return None
 
 
 def _switch_violation(node: Node, env: dict[str, int]) -> str | None:
@@ -435,14 +561,14 @@ def run(
     total = len(variants)
     domains = derive_domains_from_etg(variants, symbol_domains)
 
-    print(f"Solving {total} variants with {njobs} process(es) [CPMpy/CP-SAT]...")
+    print(f"Solving {total} variants with {njobs} process(es) [grid search, CP-SAT fallback]...")
 
     results: list[dict] = [None] * total
     completed = 0
     with ProcessPoolExecutor(max_workers=njobs) as pool:
         futures = {
             pool.submit(
-                solve_variant,
+                _solve_variant_task,
                 v,
                 i,
                 total,
@@ -453,6 +579,7 @@ def run(
         }
         for f in as_completed(futures):
             res = f.result()
+            res["variant"] = variants[res["index"]]
             results[res["index"]] = res
             completed += 1
             vname = get_variant_name(res["variant"], res["index"])

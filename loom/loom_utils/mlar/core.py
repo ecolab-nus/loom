@@ -9,16 +9,32 @@ from pathlib import Path
 from .utils import is_innermost_sequential_node, is_sequential_node
 
 _REPO_ROOT = Path(__file__).resolve().parents[3]
+_MLAR_ARCH_ROOT = _REPO_ROOT / "third_party" / "loom-mlar" / "tests"
+DEFAULT_ARCH = "wormhole"
 
 
-def _find_default_evaluator() -> Path | None:
+def arch_dir(arch: str | None = None) -> Path:
+    """Return the loom-mlar directory for *arch* (default: $LOOM_ARCH or wormhole)."""
+    return _MLAR_ARCH_ROOT / (arch or os.environ.get("LOOM_ARCH") or DEFAULT_ARCH)
+
+
+def find_evaluator(hw_spec: Path | str | None = None) -> Path | None:
+    """Locate eval_system: $LOOM_EVAL_SYSTEM, then the one generated next to
+    *hw_spec* (``<hw_spec dir>/bin/eval_system``), then the $LOOM_ARCH default."""
     env_path = os.environ.get("LOOM_EVAL_SYSTEM")
     if env_path:
         p = Path(env_path)
         if p.is_file():
             return p
 
-    canonical = _REPO_ROOT / "third_party" / "loom-mlar" / "tests" / "2d_mesh" / "bin" / "eval_system"
+    if hw_spec is not None:
+        spec = Path(hw_spec)
+        for base in (spec, _REPO_ROOT / spec):
+            candidate = base.resolve().parent / "bin" / "eval_system"
+            if candidate.is_file():
+                return candidate
+
+    canonical = arch_dir() / "bin" / "eval_system"
     if canonical.is_file():
         return canonical
 
@@ -29,7 +45,12 @@ def _find_default_evaluator() -> Path | None:
     return None
 
 
-_DEFAULT_EVALUATOR = _find_default_evaluator()
+_DEFAULT_EVALUATOR = find_evaluator()
+
+# Raw evaluator stdout keyed by (binary, input JSON). Variants share most leaf
+# Sequentials, so this skips the bulk of the subprocess calls; each hit is
+# re-parsed so callers never share result objects.
+_EVAL_CACHE: dict[tuple[str, str], str] = {}
 
 
 def evaluate_schedule(
@@ -41,20 +62,26 @@ def evaluate_schedule(
     if binary is None:
         raise FileNotFoundError(
             "eval_system binary not found. Build it with: bash scripts/build-mlar.sh\n"
-            "Or set LOOM_EVAL_SYSTEM=/path/to/eval_system"
+            "Select an architecture with LOOM_ARCH=wormhole|blackhole, "
+            "or set LOOM_EVAL_SYSTEM=/path/to/eval_system"
         )
     if not binary.exists():
         raise FileNotFoundError(f"Evaluator binary not found: {binary}")
 
-    result = subprocess.run(
-        [str(binary)],
-        input=json.dumps(schedule),
-        stdout=subprocess.PIPE,
-        stderr=None,
-        text=True,
-        check=True,
-    )
-    return json.loads(result.stdout)
+    payload = json.dumps(schedule)
+    key = (str(binary), payload)
+    stdout = _EVAL_CACHE.get(key)
+    if stdout is None:
+        stdout = subprocess.run(
+            [str(binary)],
+            input=payload,
+            stdout=subprocess.PIPE,
+            stderr=None,
+            text=True,
+            check=True,
+        ).stdout
+        _EVAL_CACHE[key] = stdout
+    return json.loads(stdout)
 
 
 def _fill_func_scenarios(schedules, *, evaluator_path=None):

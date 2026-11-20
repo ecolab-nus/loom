@@ -24,6 +24,17 @@ uv run python kernels/matmul.py \
   --debug
 ```
 
+Hardware specs under `third_party/loom-mlar/` (`bash scripts/build-mlar.sh`
+exports each `tests/<arch>/2d_mesh_torus.mlir` and its `bin/eval_system`; the
+evaluator next to the hw_spec is used):
+
+| Spec | Memories | Rates |
+|---|---|---|
+| `tests/wormhole` (kernel configs' default) | DRAM, L1 | uncalibrated fixture |
+| `tests/blackhole` | DRAM, L1 | fixture with 12×10 grid and changed DRAM/NoC/matmul rates; unverified |
+| `tests/2d_mesh` | DRAM, L1_R, L1_S | fixture; heterogeneous L1 |
+| `frontend/examples/declarative/wormhole-n150` | DRAM, L1 | n150 measurements; see its README for use |
+
 ## Configuration Files
 
 A configuration is a JSON object containing output and hardware paths plus

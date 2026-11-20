@@ -26,17 +26,17 @@ docker volume create "$VOLUME_NAME" >/dev/null
 
 HARDWARE_ARGS=()
 
-if [[ -c /dev/tenstorrent/0 && -d /dev/hugepages-1G ]]; then
-    echo "Tenstorrent hardware detected; attaching it to the container."
+if [[ -e /dev/tenstorrent && -d /dev/hugepages-1G ]]; then
+    echo "Tenstorrent hardware detected; attaching all devices to the container."
 
     HARDWARE_ARGS+=(
-        --device /dev/tenstorrent/0:/dev/tenstorrent/0
+        --device /dev/tenstorrent
         -v /dev/hugepages:/dev/hugepages
         -v /dev/hugepages-1G:/dev/hugepages-1G
     )
 else
     echo "Tenstorrent device or 1G hugepages directory not found."
-    ls -ld /dev/tenstorrent /dev/tenstorrent/0 /dev/hugepages-1G 2>&1 || true
+    ls -ld /dev/tenstorrent /dev/hugepages-1G 2>&1 || true
 fi
 
 docker create \
